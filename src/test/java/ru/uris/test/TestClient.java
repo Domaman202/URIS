@@ -1,8 +1,6 @@
 package ru.uris.test;
 
-import ru.uris.Client;
-import ru.uris.ObjectServer;
-import ru.uris.Type;
+import ru.uris.*;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -19,9 +17,29 @@ public class TestClient {
             obj.invokeMethod("print", new Type[]{Type.OBJECT}, "Hello, World!");
             obj.invokeMethod("print", new Type[]{Type.OBJECT}, 12.21);
 
-            var obj0 = (IAdder) client.getRemoteObject(0, IAdder.class);
+            var obj0 = client.getRemoteObject(1).createProxy(IAdder.class);
             var result0 = obj0.add(21);
             System.out.println(result0);
+
+            client.sync(() -> {
+                client.writePacket(new Packet(PacketType.TEST_PACKET));
+                client.send();
+                System.out.println(client.readObject());
+                System.out.println(client.readObject());
+                System.out.println(client.readObject());
+                System.out.println(client.readObject());
+                System.out.println(((ObjectServer.RemoteObject) client.readObject()).invokeMethod("get", new Type[0]));
+                return null;
+            });
+
+            var loader = client.getRemoteObject(2);
+            System.out.println(loader);
+            var clazz = (ObjectServer.RemoteObject) loader.invokeMethod("loadClass", new Type[]{Type.STRING}, "java.lang.Object");
+            System.out.println(clazz);
+            var instance = (ObjectServer.RemoteObject) clazz.invokeMethod("newInstance", new Type[0]);
+            System.out.println(instance);
+            var result1 = instance.invokeMethod("toString", new Type[0]);
+            System.out.println(result1);
         }
     }
 }

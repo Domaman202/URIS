@@ -38,7 +38,7 @@ public class Packet {
         @Override
         public void write(ObjectServer server) throws IOException {
             super.write(server);
-            server.writeString(this.type.name());
+            server.writeEnum(this.type);
             if (this.type == Type.OBJECT) {
                 server.objectPool().add(this.value);
                 Invoke.write(server, this.type, this.value, server.objectPool().indexOf(value));
@@ -82,6 +82,10 @@ public class Packet {
         public static void write(ObjectServer server, Type type, Object value, int id) throws IOException {
             server.os.writeInt(id);
             server.writeEnum(type);
+            writeWithType(server, type, value, id);
+        }
+
+        public static void writeWithType(ObjectServer server, Type type, Object value, int id) throws IOException {
             switch (type) {
                 case BYTE -> server.os.writeByte((Integer) value);
                 case SHORT -> server.os.writeShort((Integer) value);

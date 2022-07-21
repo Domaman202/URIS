@@ -42,7 +42,7 @@ public class Server implements Closeable {
         }
 
         @Override
-        public Packet listen() throws IOException, InvocationTargetException, IllegalAccessException {
+        public Packet listen() throws IOException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
             var packet = this.readPacket();
             if (packet.type == PacketType.CLOSE) {
                 this.socket.close();
