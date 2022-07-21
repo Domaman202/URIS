@@ -9,17 +9,7 @@ public class TestServer {
         try (var server = new Server(2022)) {
             server.pool.add(new TestClass(12));
             server.accept().runListener();
-            server.accept().runListener();
+//            server.accept().runListener();
         }
     }
-
-//    public static void main(String[] args) throws IOException, InterruptedException {
-//        try (var server = new Server(2022)) {
-//            server.pool.add(new Object());
-//            var connection = server.accept();
-//            connection.runListener();
-//            Thread.sleep(5000);
-//            connection.close();
-//        }
-//    }
 }
