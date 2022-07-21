@@ -7,6 +7,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -45,11 +46,17 @@ public abstract class ObjectServer implements AutoCloseable {
         this.listener.start();
     }
 
+    public boolean changeSync(boolean state) {
+        var old = this.sync;
+        this.sync = state;
+        return old;
+    }
+
     public Packet sendAndRead() throws IOException, InvocationTargetException, IllegalAccessException {
-        this.sync = true;
+        var sync = this.changeSync(true);
         this.send();
         var result = this.listen();
-        this.sync = false;
+        this.sync = sync;
         return result;
     }
 
@@ -77,7 +84,14 @@ public abstract class ObjectServer implements AutoCloseable {
                 var obj = this.objectPool().get(p.objectId);
                 var method = obj.getClass().getDeclaredMethods()[p.methodId];
                 method.setAccessible(true);
-                this.writePacket(new Packet.Return(method.invoke(Modifier.isStatic(method.getModifiers()) ? null : obj, Arrays.stream(p.arguments).map(a -> a.value).toArray())));
+                var args = new Object[p.arguments.length];
+                for (int i = 0; i < args.length; i++) {
+                    var arg = p.arguments[i];
+                    if (arg.type == Type.OBJECT)
+                        args[i] = this.getRemoteObject(arg.id);
+                    args[i] = arg.value;
+                }
+                this.writePacket(new Packet.Return(method.invoke(Modifier.isStatic(method.getModifiers()) ? null : obj, args)));
                 this.send();
                 yield p;
             }
@@ -88,6 +102,18 @@ public abstract class ObjectServer implements AutoCloseable {
             }
             default -> packet;
         };
+    }
+
+    public Object getRemoteObject(int objectId, Class<?> ... interfaces) throws IOException, InvocationTargetException, IllegalAccessException {
+        boolean sync = this.changeSync(true);
+        var instance = this.getRemoteObject(objectId);
+        var result = Proxy.newProxyInstance(ObjectServer.class.getClassLoader(), interfaces, (proxy, method, args) -> instance.invokeMethod(method.getName(), Arrays.stream(method.getParameterTypes()).map(Type::of).toArray(Type[]::new), args == null ? new Object[0] : args));
+        this.sync = sync;
+        return result;
+    }
+
+    public RemoteObject getRemoteObject(int objectId) throws IOException, InvocationTargetException, IllegalAccessException {
+        return new RemoteObject(objectId);
     }
 
     public Packet.Return sendInvoke(int objectId, int methodId, Packet.Invoke.Argument[] arguments) throws IOException, InvocationTargetException, IllegalAccessException {
@@ -214,5 +240,33 @@ public abstract class ObjectServer implements AutoCloseable {
         this.listener = null;
         this.socket.close();
         System.out.println("Connection closed!");
+    }
+
+    public class RemoteObject {
+        public final int id;
+        public final Packet.MethodList.MethodInfo[] methods;
+
+        public RemoteObject(int id) throws IOException, InvocationTargetException, IllegalAccessException {
+            this.id = id;
+            this.methods = ObjectServer.this.sendPacketMethodList(id).methods;
+        }
+
+        public Object invokeMethod(String name, Type[] argts, Object... args) throws NoSuchMethodException, IOException, InvocationTargetException, IllegalAccessException {
+            mloop:
+            for (int j = 0; j < methods.length; j++) {
+                var method = methods[j];
+                if (method.name.equals(name)) {
+                    for (int i = 0; i < method.args.length; i++)
+                        if (method.args[i] != argts[i])
+                            continue mloop;
+                    var sync = ObjectServer.this.changeSync(true);
+                    var ret = ObjectServer.this.sendInvoke(0, j, Arrays.stream(args).map(o -> new Packet.Invoke.Argument(ObjectServer.this, o)).toList().toArray(new Packet.Invoke.Argument[0]));
+                    var result = ret.type == Type.OBJECT ? ObjectServer.this.getRemoteObject(ret.id) : ret.value;
+                    ObjectServer.this.sync = sync;
+                    return result;
+                }
+            }
+            throw new NoSuchMethodException(name);
+        }
     }
 }

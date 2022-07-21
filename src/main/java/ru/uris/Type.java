@@ -10,6 +10,12 @@ public enum Type {
     OBJECT,
     NULL;
 
+    public static Type of(Object obj) {
+        if (obj == null)
+            return Type.NULL;
+        return Type.of(obj.getClass());
+    }
+
     public static Type of(Class<?> clazz) {
         if (clazz == null)
             return NULL;

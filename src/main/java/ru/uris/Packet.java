@@ -19,15 +19,18 @@ public class Packet {
 
     public static class Return extends Packet {
         public int id;
+        public final Type type;
         public final Object value;
 
         public Return(Object value) {
             super(PacketType.RETURN);
+            this.type = Type.of(value);
             this.value = value;
         }
 
         public Return(ObjectServer server) throws IOException {
             super(PacketType.RETURN);
+            this.type = server.readEnum(Type.class);
             this.id = server.is.readInt();
             this.value = read(server, server.readEnum(Type.class));
         }
@@ -35,12 +38,11 @@ public class Packet {
         @Override
         public void write(ObjectServer server) throws IOException {
             super.write(server);
-            var value = this.value;
-            var type = value == null ? Type.NULL : Type.of(value.getClass());
-            if (type == Type.OBJECT) {
-                server.objectPool().add(value);
-                Invoke.write(server, type, value, server.objectPool().indexOf(value));
-            } else Invoke.write(server, type, value, -1);
+            server.writeString(this.type.name());
+            if (this.type == Type.OBJECT) {
+                server.objectPool().add(this.value);
+                Invoke.write(server, this.type, this.value, server.objectPool().indexOf(value));
+            } else Invoke.write(server, this.type, this.value, -1);
         }
     }
 
@@ -95,6 +97,12 @@ public class Packet {
             public final int id;
             public final Type type;
             public final Object value;
+
+            public Argument(ObjectServer server, Object value) {
+                this.type = Type.of(value);
+                this.id = this.type == Type.OBJECT ? server.objectPool().indexOf(value) : -1;
+                this.value = value;
+            }
 
             public Argument(ObjectServer server, Type type, Object value) {
                 this.id = type == Type.OBJECT ? server.objectPool().indexOf(value) : -1;
