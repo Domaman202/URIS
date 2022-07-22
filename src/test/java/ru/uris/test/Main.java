@@ -1,12 +1,22 @@
 package ru.uris.test;
 
-import ru.DmN.ReflectionUtils;
-
-import java.util.Arrays;
+import ru.uris.Server;
 
 public class Main {
-    public static void main(String[] args) {
-        System.out.println(Arrays.toString(Object.class.getMethods()) + Arrays.toString(Object.class.getDeclaredMethods()));
-        System.out.println(Arrays.toString(ReflectionUtils.getAllMethods(Object.class)));
+    public static void main(String[] args) throws Exception {
+        try (var server = new Server(25565)) {
+            System.out.println(server.accept());
+        }
+
+//        try (var server = new ServerSocket(25565)) {
+//            try (var connection = server.accept()) {
+//                var is = new DataInputStream(connection.getInputStream());
+//                var os = new DataOutputStream(connection.getOutputStream());
+//                System.out.println(is.read());
+//                System.out.println(is.read());
+//                System.out.println(is.read());
+//                System.out.println(is.readLine());
+//            }
+//        }
     }
 }

@@ -75,7 +75,7 @@ public abstract class ObjectServer implements AutoCloseable {
                 this.writeString("Hello, World!");
                 this.writeEnum(PacketType.TEST_PACKET);
                 this.writeDouble(202.213);
-                this.writeObject(new Packet(PacketType.HELLO_PACKET));
+                this.writeObject(new Packet(PacketType.HELLO));
                 this.writeObject(new AtomicInteger(777));
                 yield packet;
             }
@@ -141,7 +141,7 @@ public abstract class ObjectServer implements AutoCloseable {
     }
 
     public void sendPacketHello() throws IOException {
-        this.writePacket(new Packet(PacketType.HELLO_PACKET));
+        this.writePacket(new Packet(PacketType.HELLO));
         this.send();
     }
 

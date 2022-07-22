@@ -10,7 +10,7 @@ public class Client extends ObjectServer {
 
     public Client(String host, int port) throws IOException {
         super(new Socket(host, port));
-        if (this.readPacket().type != PacketType.HELLO_PACKET)
+        if (this.readPacket().type != PacketType.HELLO)
             throw new IOException("Connection error!");
         this.sendPacketHello();
         System.out.println("Connection success!");

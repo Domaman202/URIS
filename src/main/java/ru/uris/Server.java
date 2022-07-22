@@ -30,10 +30,10 @@ public class Server implements Closeable {
         protected Connection(Socket socket) throws IOException {
             super(socket);
             this.sendPacketHello();
-            if (this.readPacket().type != PacketType.HELLO_PACKET)
+            if (this.readPacket().type != PacketType.HELLO)
                 throw new IOException("Connection error!");
-            System.out.println("Connection success!");
             Server.this.connections.add(this);
+            System.out.println("Connection success!");
         }
 
         @Override
