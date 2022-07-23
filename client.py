@@ -1,7 +1,6 @@
 import os
-import fcntl
+import time
 import array
-import socket
 import struct
 import ctypes
 import termios
@@ -9,12 +8,13 @@ import asyncio
 import threading
 import collections
 from enum import Enum
+from DmNSocket import SmartSocket
 
 class Client:
     def __init__(self, host, port):
+        self.closed = False
         self.pool = []
-        self.sock = socket.socket()
-        self.sock.connect((host, port))
+        self.sock = SmartSocket(host, port)
         assert self.readPacket().type == PacketType.HELLO
         self.sendPacket(Packet(PacketType.HELLO))
         print('Connection success!')
@@ -133,29 +133,40 @@ class Client:
     def readDoubleI(self):
         return struct.unpack('d', self.readNum(8))
     def readNum(self, size):
-        return int.from_bytes(self.sock.recv(size), 'big')
+        return int.from_bytes(self.sock.readN(size), 'big')
+
+    def syncCode(self, code):
+        client.sock.wait = True
+        self.sendPacket(Packet(PacketType.SYNC))
+        result = code()
+        self.sendPacket(Packet(PacketType.SYNC))
+        client.sock.wait = False
+        return result
 
     def listener(self):
         self.sync = False
         self.lresult = collections.deque()
         while(True):
             b = self.readNum(1)
-            if b == 7:
-                result = self.listen0(self.readPacketI())
-                if self.sync:
-                    self.lresult.append(result)
-            elif b == 0 or result.type == PacketType.CLOSE:
-                break
-            else:
-                print('WTF -> ' + b)
-                break
+            if b != None:
+                if b == 7:
+                    if self.sock.wait:
+                        self.sock.uread()  
+                        while(self.sock.wait):pass
+                        continue
+                    self.listen0(self.readPacketI())
+                else:
+                    if self.closed:
+                        return
+                    self.sock.uread()
+                    while(self.sock.wait):pass
 
     def listen(self):
         return self.listen0(self.readPacket())
     def listen0(self, packet):
         t = packet.type
         if t == PacketType.TEST_PACKET:
-            print('TEST PACKET RECIVED!')
+            print('TEST PACKET RECEIVED!')
         elif t == PacketType.OBJECT_LIST_REQUEST:
             self.sendPacket(PacketObjectList(self.pool.__len__()))
         elif t == PacketType.OBJECT_LIST:
@@ -197,6 +208,7 @@ class PacketType(Enum):
     METHOD_LIST = "METHOD_LIST"
     INVOKE = "INVOKE"
     RETURN = "RETURN"
+    SYNC = "SYNC"
     CLOSE = "CLOSE"
 
 class Type(Enum):
@@ -223,10 +235,13 @@ class Type(Enum):
 
 if __name__ == '__main__':
     client = Client('localhost', 2022)
-    thr = threading.Thread(target=client.listener);
-    thr.start()
-    client.sync = True
-    input("Press Enter to continue...\n")
-    print(client.lresult.popleft().type)
-    print(client.lresult.popleft().type)
+    threading.Thread(target=client.listener).start()
+    def sync0():
+        client.sendPacket(Packet(PacketType.HELLO))
+        print(client.readPacket().type)
+        print(client.readPacket().type)
+    client.syncCode(sync0)
+    # input("Press Enter to continue...\n")
+    time.sleep(2)
+    client.closed = True
     client.sendPacket(Packet(PacketType.CLOSE))
