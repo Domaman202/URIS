@@ -51,6 +51,24 @@ public abstract class ObjectServer implements AutoCloseable {
         this.listener.start();
     }
 
+    public Object syncWaitCode(SyncFunction code) throws IOException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
+        this.writePacket(new Packet(PacketType.SYNC));
+        this.send();
+        var result = this.sync(code);
+        this.writePacket(new Packet(PacketType.SYNC));
+        this.send();
+        return result;
+    }
+
+    public Object syncWait(SyncFunction code) throws IOException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
+        while (!this.sync) ;
+        var ret = code.run();
+        if (this.readPacket().type != PacketType.SYNC)
+            throw new IOException("Desync error!");
+        this.sync = false;
+        return ret;
+    }
+
     public Object sync(SyncFunction code) throws IOException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
         var old = this.sync;
         this.sync = true;
@@ -72,6 +90,10 @@ public abstract class ObjectServer implements AutoCloseable {
         var pool = this.objectPool();
         return switch (packet.type) {
             case TEST_PACKET -> {
+                System.out.println("TEST PACKET RECEIVED!");
+                yield packet;
+            }
+            case TEST_PACKET0 -> {
                 this.writeString("Hello, World!");
                 this.writeEnum(PacketType.TEST_PACKET);
                 this.writeDouble(202.213);
@@ -108,6 +130,10 @@ public abstract class ObjectServer implements AutoCloseable {
                 yield p;
             }
             case RETURN -> new Packet.Return(this);
+            case SYNC -> {
+                this.sync = true;
+                yield packet;
+            }
             case CLOSE -> {
                 this.close();
                 yield packet;

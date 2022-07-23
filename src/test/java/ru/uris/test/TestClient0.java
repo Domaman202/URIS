@@ -5,7 +5,7 @@ import ru.uris.*;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 
-public class TestClient {
+public class TestClient0 {
     public static void main(String[] args) throws IOException, InvocationTargetException, IllegalAccessException, NoSuchMethodException {
         try (var client = new Client("localhost", 2022)) {
             client.runListener();
@@ -22,7 +22,7 @@ public class TestClient {
             System.out.println(result0);
 
             client.sync(() -> {
-                client.writePacket(new Packet(PacketType.TEST_PACKET));
+                client.writePacket(new Packet(PacketType.TEST_PACKET0));
                 client.send();
                 System.out.println(client.readObject());
                 System.out.println(client.readObject());
