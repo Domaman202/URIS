@@ -5,19 +5,25 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Client extends ObjectServer {
-    public final List<Object> pool = new ArrayList<>();
+@SuppressWarnings("unused")
+public class Client extends ObjectProviderSocket {
+    public final List<Object> objectPool = new ArrayList<>();
 
     public Client(String host, int port) throws IOException {
         super(new Socket(host, port));
-        if (this.readPacket().type != PacketType.HELLO)
-            throw new IOException("Connection error!");
-        this.sendPacketHello();
-        System.out.println("Connection success!");
     }
 
     @Override
-    public List<Object> objectPool() {
-        return this.pool;
+    public List<Object> ObjectPool() {
+        return this.objectPool;
+    }
+
+    @Override
+    public void close() throws IOException {
+        if (!this.socket.isClosed()) {
+            this.writePacket(new Packet(Packet.nextId(), Packet.Type.CLOSE, true));
+            this.os.flush();
+        }
+        super.close();
     }
 }
