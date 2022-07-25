@@ -27,17 +27,18 @@ public abstract class ObjectProviderSocket implements Closeable {
     public abstract List<Object> ObjectPool();
 
     public Thread createListener() {
-        return this.listener = new Thread(() -> {
-            while (!this.socket.isClosed()) {
-                try {
-                    if (this.is.available() > 0)
-                        this.listen();
-                    else Thread.onSpinWait();
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        });
+        return this.listener == null ?
+                this.listener = new Thread(() -> {
+                    while (!this.socket.isClosed()) {
+                        try {
+                            if (this.is.available() > 0)
+                                this.listen();
+                            else Thread.onSpinWait();
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                }) : this.listener;
     }
 
     public synchronized void listen() throws IOException {

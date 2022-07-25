@@ -23,15 +23,16 @@ public class Packet {
     public static Packet read(ObjectProviderSocket socket) throws IOException {
         var id = socket.readInt();
         var type = socket.readEnum(Type.class);
+        var request = socket.readBoolean();
         return switch (type) {
-            case HELLO, CLOSE -> new Packet(id, type, socket.readBoolean());
-            case OBJECT_LIST -> socket.readBoolean() ? new PObjectList(id) : new PObjectList(id, socket);
+            case HELLO, CLOSE -> new Packet(id, type, request);
+            case OBJECT_LIST -> request ? new PObjectList(id) : new PObjectList(id, socket);
         };
     }
 
     public void write(ObjectProviderSocket socket) throws IOException {
         socket.writeInt(id);
-        socket.writeEnum(this.type.name());
+        socket.writeEnum(this.type);
         socket.writeBoolean(this.request);
     }
 
