@@ -1,247 +1,231 @@
 import os
 import time
 import array
+import socket
 import struct
 import ctypes
 import termios
 import asyncio
+import builtins
 import threading
 import collections
 from enum import Enum
-from DmNSocket import SmartSocket
 
-class Client:
+# Java Like Socket
+class JLSocket(socket.socket):
     def __init__(self, host, port):
-        self.closed = False
-        self.pool = []
-        self.sock = SmartSocket(host, port)
-        assert self.readPacket().type == PacketType.HELLO
-        self.sendPacket(Packet(PacketType.HELLO))
-        print('Connection success!')
-    
-    def sendObject(self, obj):
-        if type(obj) is Packet:
-            self.sendPacket(obj)
-        elif type(obj) is Enum:
-            self.sendEnum(obj)
-        else:
-            t = Type.of(obj)
-            self.sendNum(1, t.value)
-            self.sendWithType(t, obj)
-    def sendWithType(self, t, obj):
-        if t == Type.STRING:
-            self.sendStringI(obj)
-        elif t == Type.OBJECT:
-            pass # TODO: объекты >:)
-        elif t != Type.NULL:
-            if t == Type.DOUBLE:
-                self.sendDoubleI(obj)
-            else:
-                size = 0
-                if t == Type.BYTE:
-                    size = 1
-                elif t == Type.SHORT:
-                    size = 2
-                elif t == Type.INT:
-                    size = 4
-                elif t == Type.LONG:
-                    size = 8
-                self.sendNum(size, obj)
-    def sendPacket(self, packet):
-        self.sendNum(1, 7)
-        packet.write(self)
-    def sendEnum(self, enum):
-        self.sendNum(1, 6)
-        self.sendString(enum.name)
-    def sendString(self, text):
-        self.sendNum(1, 0)
-        self.sendStringI(text)
-    def sendDouble(self, num):
-        self.sendNum(1, 1)
-        self.sendDoubleI(num)
-    def sendLong(self, num):
-        self.sendNum(1, 2)
-        self.sendNum(8, num)
-    def sendInt(self, num):
-        self.sendNum(1, 3)
-        self.sendNum(4, num)
-    def sendShort(self, num):
-        self.sendNum(1, 4)
-        self.sendNum(2, num)
-    def sendByte(self, num):
-        self.sendNum(1, 5)
-        self.sendNum(1, num)
-    def sendStringI(self, text):
+        super().__init__()
+        self.connect((host, port))
+
+    def sendString0(self, text: str):
         b = str.encode(text)
         self.sendNum(4, b.__len__())
-        self.sock.send(b)
-    def sendDoubleI(self, num):
-        self.sock.send(struct.pack('d', num))
-    def sendNum(self, size, num):
-        self.sock.send(num.to_bytes(size, 'big'))
+        self.send(b)
+    def sendDouble0(self, num: float):
+        self.send(struct.pack('d', num))
+    def sendLong0(self, num: int):
+        self.sendNum(8, num)
+    def sendInt0(self, num: int):
+        self.sendNum(4, num)
+    def sendShort0(self, num: int):
+        self.sendNum(2, num)
+    def sendByte0(self, num: int):
+        self.sendNum(1, num)
+    def sendNum(self, size, num: int):
+        self.send(num.to_bytes(size, 'big'))
 
-    def readObject(self):
-        t = self.readNum(1)
-        if t == 0:
-            return self.readStringI()
-        if t == 1:
-            return self.readDoubleI()
-        if t == 2:
-            return self.readNum(8)
-        if t == 3:
-            return self.readNum(4)
-        if t == 4:
-            return self.readNum(2)
-        if t == 5:
-            return self.readNum(1)
-        if t == 6:
-            return self.readString()
-        if t == 7:
-            return self.readPacketI()
-        if t == 8:
-            return None # TODO: объекты >:)
-        if t == 9:
-            return None
-    def readPacket(self):
-        assert self.readNum(1) == 7
-        return self.readPacketI()
-    def readEnum(self, enum):
-        assert self.readNum(1) == 6
-        return enum[self.readString()]
-    def readString(self):
-        assert self.readNum(1) == 0
-        return self.readStringI()
-    def readDouble(self):
-        assert self.readNum(1) == 1
-        return self.readDoubleI()
-    def readLong(self):
-        assert self.readNum(1) == 2
+    def readString0(self) -> str:
+        return self.recv(self.readInt0()).decode()
+    def readDouble0(self) -> float:
+        return struct.unpack('d', self.readN(8))
+    def readLong0(self) -> int:
         return self.readNum(8)
-    def readInt(self):
-        assert self.readNum(1) == 3
+    def readInt0(self) -> int:
         return self.readNum(4)
-    def readShort(self):
-        assert self.readNum(1) == 4
+    def readShort0(self) -> int:
         return self.readNum(2)
-    def readByte(self):
-        assert self.readNum(1) == 5
+    def readByte0(self) -> int:
         return self.readNum(1)
-    def readPacketI(self):
-        return Packet(self.readEnum(PacketType))
-    def readStringI(self):
-        return self.sock.recv(self.readNum(4)).decode()
-    def readDoubleI(self):
-        return struct.unpack('d', self.readNum(8))
-    def readNum(self, size):
-        return int.from_bytes(self.sock.readN(size), 'big')
+    def readNum(self, size) -> int:
+        return int.from_bytes(self.recv(size), 'big')
 
-    def syncCode(self, code):
-        client.sock.wait = True
-        self.sendPacket(Packet(PacketType.SYNC))
-        result = code()
-        self.sendPacket(Packet(PacketType.SYNC))
-        client.sock.wait = False
-        return result
+class ObjectProviderSocket(JLSocket):
+    def __init__(self, host, port):
+        super().__init__(host, port)
+        self.buffer = []
+        self.listener = None
 
-    def listener(self):
-        self.sync = False
-        self.lresult = collections.deque()
-        while(True):
-            b = self.readNum(1)
-            if b != None:
-                if b == 7:
-                    if self.sock.wait:
-                        self.sock.uread()  
-                        while(self.sock.wait):pass
-                        continue
-                    self.listen0(self.readPacketI())
-                else:
-                    if self.closed:
-                        return
-                    self.sock.uread()
-                    while(self.sock.wait):pass
+    def createListener(self):
+        if self.listener != None:
+            return self.listener
+        def listener():
+            try:
+                while(True):
+                    self.listen()
+            except Exception as e:
+                print(e)
+        self.listener = threading.Thread(target=listener)
+        return self.listener
 
     def listen(self):
-        return self.listen0(self.readPacket())
-    def listen0(self, packet):
-        t = packet.type
-        if t == PacketType.TEST_PACKET:
-            print('TEST PACKET RECEIVED!')
-        elif t == PacketType.OBJECT_LIST_REQUEST:
-            self.sendPacket(PacketObjectList(self.pool.__len__()))
-        elif t == PacketType.OBJECT_LIST:
-            return PacketObjectList(self.readNum(4))
-        return packet
-    
-    def sendPacketObjectList(self):
-        self.sendPacket(Packet(PacketType.OBJECT_LIST_REQUEST))
-        return self.listen()
-    
-    # class RemoteObject:
-    #     def __init__(self, outer, id):
-    #         self.outer = outer
-    #         self.id = id
-    #         pass
+        packet = self.readPacket()
+        if packet.request:
+            if packet.type == Packet.Type.HELLO:
+                self.sendPacket(Packet(packet.id, Packet.Type.HELLO, False))
+            elif packet.type == Packet.Type.CLOSE:
+                self.close()
+            elif packet.type == Packet.Type.OBJECT_LIST:
+                self.sendPacket(PObjectList.create1(packet.id, self.objectPool))
+        else:
+            self.buffer.append(packet)
 
-class Packet(object):
-    def __init__(self, type):
+    def sendAndReceive(self, packet):
+        id = self.sendPacket(packet)
+        while(self.checkBuffer(id)):pass
+        for e in self.buffer:
+            if e.id == id:
+                return e
+        raise Exception("WTF XD?!")
+
+    def checkBuffer(self, id):
+        for e in self.buffer:
+            if e.id == id:
+                return False
+        return True
+
+    def sendPacket(self, packet) -> int:
+        self.sendByte0(7)
+        packet.write(self)
+        return packet.id
+    def sendEnum(self, enum):
+        self.sendByte0(6)
+        self.sendString0(enum.name)
+    def sendString(self, text: str):
+        self.sendByte0(0)
+        self.sendString0(text)
+    def sendDouble(self, num: float):
+        self.sendByte0(1)
+        self.sendDouble0(num)
+    def sendLong(self, num: int):
+        self.sendByte0(2)
+        self.sendLong0(num)
+    def sendInt(self, num: int):
+        self.sendByte0(3)
+        self.sendInt0(num)
+    def sendShort(self, num: int):
+        self.sendByte0(4)
+        self.sendShort0(num)
+    def sendByte(self, num: int):
+        self.sendByte0(5)
+        self.sendByte0(num)
+    def sendBoolean(self, state: bool):
+        if state:
+            self.sendByte(1)
+        else:
+            self.sendByte(0)
+
+    def readPacket(self):
+        self.checkValue(7)
+        return Packet.read(self)
+    def readEnum(self, enum):
+        self.checkValue(6)
+        return enum[self.readString0()]
+    def readString(self) -> str:
+        self.checkValue(0)
+        return self.readString0()
+    def readDouble(self) -> float:
+        self.checkValue(1)
+        return self.readDouble0()
+    def readLong(self) -> int:
+        self.checkValue(2)
+        return self.readLong0()
+    def readInt(self) -> int:
+        self.checkValue(3)
+        return self.readInt0()
+    def readShort(self) -> int:
+        self.checkValue(4)
+        return self.readShort0()
+    def readByte(self) -> int:
+        self.checkValue(5)
+        return self.readByte0()
+    def readBoolean(self) -> bool:
+        return self.readByte() == 1
+    def checkValue(self, needed: int):
+        if self.readByte0() != needed:
+            raise Exception("Invalid value!")
+
+class Client(ObjectProviderSocket):
+    def __init__(self, host, port):
+        super().__init__(host, port)
+        self.objectPool = []
+    
+    def close(self):
+        self.sendPacket(Packet(Packet.nextId(), Packet.Type.CLOSE, True))
+        super().close()
+
+class Packet:
+    LAST_ID = 0
+
+    def nextId() -> int:
+        LAST_ID = Packet.LAST_ID
+        Packet.LAST_ID += 1
+        return LAST_ID
+
+    def __init__(self, id, type, request):
+        self.id = id
         self.type = type
+        self.request = request
+    
+    def read(sock):
+        id = sock.readInt()
+        t = sock.readEnum(Packet.Type)
+        request = sock.readBoolean()
+        if t == Packet.Type.HELLO or t == Packet.Type.CLOSE:
+            return Packet(id, t, request)
+        if t == Packet.Type.OBJECT_LIST:
+            if request:
+                return PObjectList.create0(id)
+            else:
+                return PObjectList.create2(id, sock)
+    
+    def write(self, sock):
+        sock.sendInt(self.id)
+        sock.sendEnum(self.type)
+        sock.sendBoolean(self.request)
 
-    def write(self, client):
-        client.sendEnum(self.type)
+    class Type(Enum):
+        HELLO = "HELLO"
+        CLOSE = "CLOSE"
+        OBJECT_LIST = "OBJECT_LIST"
 
-class PacketObjectList(Packet):
-    def __init__(self, count):
-        super().__init__(PacketType.OBJECT_LIST)
-        self.count = count
+class PObjectList(Packet):
+        def __init__(self, id: int, request: bool):
+            super().__init__(id, Packet.Type.OBJECT_LIST, request)
+            self.objects = []
 
-    def write(self, client):
-        super().write(client)
-        client.sendNum(4, self.count)
-
-class PacketType(Enum):
-    TEST_PACKET = "TEST_PACKET"
-    HELLO = "HELLO"
-    OBJECT_LIST_REQUEST = "OBJECT_LIST_REQUEST"
-    OBJECT_LIST = "OBJECT_LIST"
-    METHOD_LIST_REQUEST = "METHOD_LIST_REQUEST"
-    METHOD_LIST = "METHOD_LIST"
-    INVOKE = "INVOKE"
-    RETURN = "RETURN"
-    SYNC = "SYNC"
-    CLOSE = "CLOSE"
-
-class Type(Enum):
-    BYTE = 5
-    SHORT = 4
-    INT = 3
-    LONG = 2
-    DOUBLE = 1
-    STRING = 0
-    OBJECT = 8
-    NULL = 9
-
-    def of(obj):
-        if obj is None:
-            return Type.NULL
-        t = type(obj)
-        if t is int:
-            return Type.INT
-        if t is float:
-            return Type.DOUBLE
-        if t is str:
-            return Type.STRING
-        return Type.OBJECT
+        def create0(id: int):
+            return PObjectList(id, True)
+        def create1(id: int, objects: list):
+            instance = PObjectList(id, False)
+            instance.objects = list(map(lambda o: builtins.id(o), objects))
+            return instance
+        def create2(id: int, sock: ObjectProviderSocket):
+            instance = PObjectList(id, False)
+            i = sock.readInt()
+            for _ in range(0, i):
+                instance.objects.append(sock.readLong())
+            return instance
+        
+        def write(self, sock):
+            super().write(sock)
+            if not self.request:
+                sock.sendInt(self.objects.__len__())
+                for e in self.objects:
+                    sock.writeLong(e)
 
 if __name__ == '__main__':
-    client = Client('localhost', 2022)
-    threading.Thread(target=client.listener).start()
-    def sync0():
-        client.sendPacket(Packet(PacketType.HELLO))
-        print(client.readPacket().type)
-        print(client.readPacket().type)
-    client.syncCode(sync0)
-    # input("Press Enter to continue...\n")
-    time.sleep(2)
-    client.closed = True
-    client.sendPacket(Packet(PacketType.CLOSE))
+    client = Client('localhost', 2014)
+    client.createListener().start()
+    print(client.sendAndReceive(PObjectList.create0(Packet.nextId())).objects)
+    input("Press Enter to continue...")
+    client.close()
