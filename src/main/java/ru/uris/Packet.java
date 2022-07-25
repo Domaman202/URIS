@@ -1,5 +1,7 @@
 package ru.uris;
 
+import ru.DmN.ReflectionUtils;
+
 import java.io.IOException;
 import java.util.List;
 
@@ -27,6 +29,7 @@ public class Packet {
         return switch (type) {
             case HELLO, CLOSE -> new Packet(id, type, request);
             case OBJECT_LIST -> request ? new PObjectList(id) : new PObjectList(id, socket);
+            case METHOD_LIST -> request ? new Packet.PMethodList(id, socket.readInt(), true) : new PMethodList(id, socket);
         };
     }
 
@@ -34,6 +37,51 @@ public class Packet {
         socket.writeInt(id);
         socket.writeEnum(this.type);
         socket.writeBoolean(this.request);
+    }
+
+    public static class PMethodList extends Packet {
+        public final int objectId;
+        public final RemoteMethod[] methods;
+
+        public PMethodList(int pid, int oid, boolean request) {
+            super(pid, Type.METHOD_LIST, request);
+            this.objectId = oid;
+            this.methods = null;
+        }
+
+        public PMethodList(int pid, ObjectProviderSocket socket) throws IOException {
+            super(pid, Type.METHOD_LIST, false);
+            this.objectId = socket.readInt();
+            var mc = socket.readInt();
+            this.methods = new RemoteMethod[mc];
+            for (int i = 0; i < mc; i++) {
+                var name = socket.readStringI();
+                var ac = socket.readInt();
+                var args = new VType[ac];
+                for (int j = 0; j < ac; j++) {
+                    args[j] = VType.of(socket.readByte());
+                }
+                this.methods[i] = new RemoteMethod(name, args, VType.of(socket.readByte()));
+            }
+        }
+
+        @Override
+        public void write(ObjectProviderSocket socket) throws IOException {
+            super.write(socket);
+            socket.writeInt(this.objectId);
+            if (this.request)
+                return;
+            var methods = ReflectionUtils.getAllMethods(socket.ObjectPool().get(this.objectId).getClass());
+            socket.writeInt(methods.length);
+            for (var method : methods) {
+                socket.writeStringI(method.getName());
+                socket.writeInt(method.getParameterCount());
+                for (var arg : method.getParameterTypes()) {
+                    socket.writeByte((byte) VType.of(arg).id);
+                }
+                socket.writeByte((byte) VType.of(method.getReturnType()).id);
+            }
+        }
     }
 
     public static class PObjectList extends Packet {
@@ -73,6 +121,7 @@ public class Packet {
         HELLO,
         CLOSE,
 
-        OBJECT_LIST
+        OBJECT_LIST,
+        METHOD_LIST
     }
 }
