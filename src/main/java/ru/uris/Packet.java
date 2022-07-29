@@ -55,7 +55,7 @@ public class Packet {
             var mc = socket.readInt();
             this.methods = new RemoteMethod[mc];
             for (int i = 0; i < mc; i++) {
-                var name = socket.readStringI();
+                var name = socket.readString();
                 var ac = socket.readInt();
                 var args = new VType[ac];
                 for (int j = 0; j < ac; j++) {
@@ -74,7 +74,7 @@ public class Packet {
             var methods = ReflectionUtils.getAllMethods(socket.ObjectPool().get(this.objectId).getClass());
             socket.writeInt(methods.length);
             for (var method : methods) {
-                socket.writeStringI(method.getName());
+                socket.writeString(method.getName());
                 socket.writeInt(method.getParameterCount());
                 for (var arg : method.getParameterTypes()) {
                     socket.writeByte((byte) VType.of(arg).id);
