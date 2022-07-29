@@ -54,6 +54,7 @@ class ObjectProviderSocket(JLSocket):
         super().__init__(host, port)
         self.buffer = []
         self.listener = None
+        self.lock = threading.Lock()
 
     def createListener(self):
         if self.listener != None:
@@ -76,6 +77,8 @@ class ObjectProviderSocket(JLSocket):
                 self.close()
             elif packet.type == Packet.Type.OBJECT_LIST:
                 self.sendPacket(PObjectList.create1(packet.id, self.objectPool))
+            elif packet.type == Packet.Type.METHOD_LIST:
+                self.sendPacket(PMethodList(packet.id, packet.objectId, False))
         else:
             self.buffer.append(packet)
 
@@ -94,8 +97,10 @@ class ObjectProviderSocket(JLSocket):
         return True
 
     def sendPacket(self, packet) -> int:
+        self.lock.acquire()
         self.sendByte0(7)
         packet.write(self)
+        self.lock.release()
         return packet.id
     def sendEnum(self, enum):
         self.sendByte0(6)
@@ -187,6 +192,11 @@ class Packet:
                 return PObjectList.create0(id)
             else:
                 return PObjectList.create2(id, sock)
+        if t == Packet.Type.METHOD_LIST:
+            if request:
+                return PMethodList(id, sock.readInt(), True)
+            else:
+                return PMethodList.create0(id, sock)
     
     def write(self, sock):
         sock.sendInt(self.id)
@@ -197,35 +207,89 @@ class Packet:
         HELLO = "HELLO"
         CLOSE = "CLOSE"
         OBJECT_LIST = "OBJECT_LIST"
+        METHOD_LIST = "METHOD_LIST"
+
+class PMethodList(Packet):
+    def __init__(self, pid: int, oid: int, request: bool):
+        super().__init__(pid, Packet.Type.METHOD_LIST, request)
+        self.objectId = oid
+        self.methods = None
+    
+    def create0(pid: int, sock):
+        instance = PMethodList(pid, sock.readInt(), False)
+        instance.methods = []
+        for i in range(0, sock.readInt()):
+            name = sock.readString()
+            args = []
+            for j in range(0, sock.readInt()):
+                args.append(VType.of(sock.readByte()))
+            instance.methods.append(RemoteMethod(name, args, VType.of(sock.readByte())))
+        return instance
+    
+    def write(self, sock):
+        super().write(sock)
+        sock.sendInt(self.objectId)
+        if self.request:
+            return
+        # TODO:
+    
 
 class PObjectList(Packet):
-        def __init__(self, id: int, request: bool):
-            super().__init__(id, Packet.Type.OBJECT_LIST, request)
-            self.objects = []
+    def __init__(self, id: int, request: bool):
+        super().__init__(id, Packet.Type.OBJECT_LIST, request)
+        self.objects = []
 
-        def create0(id: int):
-            return PObjectList(id, True)
-        def create1(id: int, objects: list):
-            instance = PObjectList(id, False)
-            instance.objects = list(map(lambda o: builtins.id(o), objects))
-            return instance
-        def create2(id: int, sock: ObjectProviderSocket):
-            instance = PObjectList(id, False)
-            i = sock.readInt()
-            for _ in range(0, i):
-                instance.objects.append(sock.readLong())
-            return instance
+    def create0(id: int):
+        return PObjectList(id, True)
+    def create1(id: int, objects: list):
+        instance = PObjectList(id, False)
+        instance.objects = list(map(lambda o: builtins.id(o), objects))
+        return instance
+    def create2(id: int, sock: ObjectProviderSocket):
+        instance = PObjectList(id, False)
+        i = sock.readInt()
+        for _ in range(0, i):
+            instance.objects.append(sock.readLong())
+        return instance
         
-        def write(self, sock):
-            super().write(sock)
-            if not self.request:
-                sock.sendInt(self.objects.__len__())
-                for e in self.objects:
-                    sock.writeLong(e)
+    def write(self, sock):
+        super().write(sock)
+        if not self.request:
+            sock.sendInt(self.objects.__len__())
+            for e in self.objects:
+                sock.writeLong(e)
+
+class RemoteMethod:
+    def __init__(self, name: str, args: list, ret):
+        self.name = name
+        self.args = args
+        self.ret = ret
+
+class VType(Enum):
+    STRING = 0
+    DOUBLE = 1
+    LONG = 2
+    INT = 3
+    SHORT = 4
+    BYTE = 5
+    ENUM = 6
+    PACKET = 7
+    OBJECT = 8
+    NULL = 9
+
+    def of(i: int):
+        for e in VType:
+            if e.value == i:
+                return e
 
 if __name__ == '__main__':
     client = Client('localhost', 2014)
     client.createListener().start()
     print(client.sendAndReceive(PObjectList.create0(Packet.nextId())).objects)
+    print(client.sendAndReceive(PObjectList.create0(Packet.nextId())).objects)
+    print()
+    for method in client.sendAndReceive(PMethodList(Packet.nextId(), 0, True)).methods:
+        print("[NAME]{}\n[ARGS]{}".format(method.name, method.args))
+        print("[RETURN]{}\n".format(method.ret))
     input("Press Enter to continue...")
     client.close()
