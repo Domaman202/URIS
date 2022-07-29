@@ -102,6 +102,10 @@ class ObjectProviderSocket(JLSocket):
         packet.write(self)
         self.lock.release()
         return packet.id
+    def sendARType(self, type):
+        self.sendByte0(10)
+        self.sendInt0(type.dim)
+        self.sendEnum(type.type)
     def sendEnum(self, enum):
         self.sendByte0(6)
         self.sendString0(enum.name)
@@ -132,6 +136,9 @@ class ObjectProviderSocket(JLSocket):
     def readPacket(self):
         self.checkValue(7)
         return Packet.read(self)
+    def readARType(self):
+        self.checkValue(10)
+        return ARType(self.readInt0(), self.readEnum(PType))
     def readEnum(self, enum):
         self.checkValue(6)
         return enum[self.readString0()]
@@ -222,8 +229,8 @@ class PMethodList(Packet):
             name = sock.readString()
             args = []
             for j in range(0, sock.readInt()):
-                args.append(VType.of(sock.readByte()))
-            instance.methods.append(RemoteMethod(name, args, VType.of(sock.readByte())))
+                args.append(sock.readARType())
+            instance.methods.append(RemoteMethod(name, args, sock.readARType()))
         return instance
     
     def write(self, sock):
@@ -231,8 +238,15 @@ class PMethodList(Packet):
         sock.sendInt(self.objectId)
         if self.request:
             return
-        # TODO:
-    
+        clazz = sock.objectPool[self.objectId].__class__
+        attributes = [getattr(clazz, attr) for attr in dir(clazz)]
+        methods = [attr for attr in attributes if attr.__class__.__name__ == 'builtin_function_or_method' or attr.__class__.__name__ == 'function']
+        sock.sendInt(methods.__len__())
+        for method in methods:
+            sock.sendString(method.__name__)
+            sock.sendInt(1)
+            sock.sendARType(ARType(1, PType.OBJECT))
+            sock.sendARType(ARType(0, PType.OBJECT))
 
 class PObjectList(Packet):
     def __init__(self, id: int, request: bool):
@@ -265,7 +279,15 @@ class RemoteMethod:
         self.args = args
         self.ret = ret
 
-class VType(Enum):
+class ARType:
+    def __init__(self, dim: int, type):
+        self.dim = dim
+        self.type = type
+    
+    def __repr__(self):
+        return f"<{self.type}[{self.dim}]>"
+
+class PType(Enum):
     STRING = 0
     DOUBLE = 1
     LONG = 2
@@ -277,14 +299,9 @@ class VType(Enum):
     OBJECT = 8
     NULL = 9
 
-    def of(i: int):
-        for e in VType:
-            if e.value == i:
-                return e
-
 if __name__ == '__main__':
     client = Client('localhost', 2014)
-    client.objectPool.append(object)
+    client.objectPool.append(object())
     client.createListener().start()
     print(client.sendAndReceive(PObjectList.create0(Packet.nextId())).objects)
     print(client.sendAndReceive(PObjectList.create0(Packet.nextId())).objects)
