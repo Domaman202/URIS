@@ -2,7 +2,7 @@ package ru.uris;
 
 import java.util.Arrays;
 
-public enum VType {
+public enum PType {
     STRING(0),
     DOUBLE(1),
     LONG(2),
@@ -16,21 +16,11 @@ public enum VType {
 
     public final int id;
 
-    VType(int id) {
+    PType(int id) {
         this.id = id;
     }
 
-    public static VType of(int id) {
-        return Arrays.stream(values()).filter(type -> type.id == id).findFirst().orElseThrow();
-    }
-
-    public static VType of(Object obj) {
-        if (obj == null)
-            return NULL;
-        return VType.of(obj.getClass());
-    }
-
-    public static VType of(Class<?> clazz) {
+    public static PType of(Class<?> clazz) {
         if (clazz == String.class)
             return STRING;
         if (clazz == Float.TYPE || clazz == Float.class || clazz == Double.TYPE || clazz == Double.class)

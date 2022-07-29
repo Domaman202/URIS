@@ -57,11 +57,11 @@ public class Packet {
             for (int i = 0; i < mc; i++) {
                 var name = socket.readString();
                 var ac = socket.readInt();
-                var args = new VType[ac];
+                var args = new ARType[ac];
                 for (int j = 0; j < ac; j++) {
-                    args[j] = VType.of(socket.readByte());
+                    args[j] = socket.readARType();
                 }
-                this.methods[i] = new RemoteMethod(name, args, VType.of(socket.readByte()));
+                this.methods[i] = new RemoteMethod(name, args, socket.readARType());
             }
         }
 
@@ -77,9 +77,9 @@ public class Packet {
                 socket.writeString(method.getName());
                 socket.writeInt(method.getParameterCount());
                 for (var arg : method.getParameterTypes()) {
-                    socket.writeByte((byte) VType.of(arg).id);
+                    socket.writeARType(ARType.of(arg));
                 }
-                socket.writeByte((byte) VType.of(method.getReturnType()).id);
+                socket.writeARType(ARType.of(method.getReturnType()));
             }
         }
     }

@@ -75,6 +75,12 @@ public abstract class ObjectProviderSocket implements Closeable {
         return packet.id;
     }
 
+    public synchronized void writeARType(ARType type) throws IOException {
+        this.os.write(10);
+        this.os.writeInt(type.dim);
+        this.writeEnum(type.type);
+    }
+
     public synchronized void writeEnum(Enum<?> value) throws IOException {
         this.os.write(6);
         this.writeStringI(value.name());
@@ -128,6 +134,11 @@ public abstract class ObjectProviderSocket implements Closeable {
     public synchronized Packet readPacket() throws IOException {
         this.checkValue(7);
         return Packet.read(this);
+    }
+
+    public synchronized ARType readARType() throws IOException {
+        this.checkValue(10);
+        return new ARType(this.is.readInt(), this.readEnum(PType.class));
     }
 
     @SuppressWarnings("unchecked")
