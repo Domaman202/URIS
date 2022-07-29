@@ -257,7 +257,7 @@ class PObjectList(Packet):
         if not self.request:
             sock.sendInt(self.objects.__len__())
             for e in self.objects:
-                sock.writeLong(e)
+                sock.sendLong(e)
 
 class RemoteMethod:
     def __init__(self, name: str, args: list, ret):
@@ -284,6 +284,7 @@ class VType(Enum):
 
 if __name__ == '__main__':
     client = Client('localhost', 2014)
+    client.objectPool.append(object)
     client.createListener().start()
     print(client.sendAndReceive(PObjectList.create0(Packet.nextId())).objects)
     print(client.sendAndReceive(PObjectList.create0(Packet.nextId())).objects)
