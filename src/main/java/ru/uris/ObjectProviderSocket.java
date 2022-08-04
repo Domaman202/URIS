@@ -201,7 +201,7 @@ public abstract class ObjectProviderSocket implements Closeable {
     }
 
     @Override
-    public void close() throws IOException {
+    public synchronized void close() throws IOException {
         this.istream.close();
         this.ostream.close();
     }

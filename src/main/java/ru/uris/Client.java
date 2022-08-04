@@ -18,7 +18,7 @@ public class Client extends ObjectProviderSocket {
     }
 
     @Override
-    public void close() throws IOException {
+    public synchronized void close() throws IOException {
         if (!this.socket.isClosed()) {
             this.writePacket(new Packet(Packet.nextId(), Packet.Type.CLOSE, true));
             this.ostream.flush();
