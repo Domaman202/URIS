@@ -20,7 +20,7 @@ public class TestServer {
             System.out.println(Arrays.toString(((Packet.PMethodList) connection.sendAndReceive(new Packet.PMethodList(Packet.nextId(), 0, true))).methods));
             System.out.println();
             for (var method : ((Packet.PMethodList) connection.sendAndReceive(new Packet.PMethodList(Packet.nextId(), 0, true))).methods)
-                System.out.println("[NAME]" + method.name + "\n[ARGS]:" + Arrays.toString(method.args) + "\n[RETURN]" + method.ret + "\n");
+                System.out.println("[NAME]" + method.name + "\n[ARGS]:" + Arrays.toString(method.args) + "\n[RETURN]:" + method.ret + "\n");
         }
     }
 }
