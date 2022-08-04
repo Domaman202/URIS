@@ -1,12 +1,13 @@
-package ru.uris.test.java;
+package ru.uris.test.groovy;
 
 import org.apache.log4j.FileAppender;
 import org.apache.log4j.PatternLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import ru.uris.Client;
 import ru.uris.Packet;
-import ru.uris.Server;
+import ru.uris.gadapter.GroovyClient;
+import ru.uris.gadapter.GroovyServer;
+import ru.uris.test.java.TestClass;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -19,7 +20,7 @@ public class MainTest {
     public static void main(String[] args) throws InterruptedException, IOException {
         var serverThread = new Thread(() -> {
             // Server
-            try (var server = new Server(2014)) {
+            try (var server = new GroovyServer(2014)) {
                 server.objectPool.add(new Object());
                 server.objectPool.add(new TestClass(12));
                 server.objectPool.add(MainTest.class.getClassLoader());
@@ -46,7 +47,7 @@ public class MainTest {
             while (!flag)
                 Thread.onSpinWait();
             // Client
-            try (var client = new Client("localhost", 2014)) {
+            try (var client = new GroovyClient("localhost", 2014)) {
                 client.objectPool.add(new Object());
 
                 client.createListener().start();
@@ -62,7 +63,7 @@ public class MainTest {
             }
         });
 
-        org.apache.log4j.Logger.getRootLogger().addAppender(new FileAppender(new PatternLayout("%r [%t] %p %c %x\n%m%n\n"), "Java_MainTest.log"));
+        org.apache.log4j.Logger.getRootLogger().addAppender(new FileAppender(new PatternLayout("%r [%t] %p %c %x\n%m%n\n"), "Groovy_MainTest.log"));
 
         serverThread.start();
         clientThread.start();
