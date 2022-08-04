@@ -7,7 +7,6 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 
-@SuppressWarnings("unused")
 public class Server implements Closeable {
     public final List<Object> objectPool = new ArrayList<>();
     protected final ServerSocket socket;

@@ -1,7 +1,5 @@
 package ru.uris;
 
-import java.util.Arrays;
-
 public enum PType {
     STRING(0),
     DOUBLE(1),

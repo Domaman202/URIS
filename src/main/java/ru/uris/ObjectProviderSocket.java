@@ -10,18 +10,17 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-@SuppressWarnings("unused")
 public abstract class ObjectProviderSocket implements Closeable {
     protected Socket socket;
-    protected DataInputStream is;
-    protected DataOutputStream os;
+    protected DataInputStream istream;
+    protected DataOutputStream ostream;
     public final List<Packet> buffer = new ArrayList<>();
     protected Thread listener;
 
     public ObjectProviderSocket(Socket socket) throws IOException {
         this.socket = socket;
-        this.is = new DataInputStream(socket.getInputStream());
-        this.os = new DataOutputStream(socket.getOutputStream());
+        this.istream = new DataInputStream(socket.getInputStream());
+        this.ostream = new DataOutputStream(socket.getOutputStream());
     }
 
     public abstract List<Object> ObjectPool();
@@ -31,7 +30,7 @@ public abstract class ObjectProviderSocket implements Closeable {
                 this.listener = new Thread(() -> {
                     while (!this.socket.isClosed()) {
                         try {
-                            if (this.is.available() > 0)
+                            if (this.istream.available() > 0)
                                 this.listen();
                             else Thread.onSpinWait();
                         } catch (IOException e) {
@@ -48,9 +47,9 @@ public abstract class ObjectProviderSocket implements Closeable {
                 case HELLO -> this.writePacket(new Packet(packet.id, Packet.Type.HELLO, false));
                 case CLOSE -> this.close();
                 case OBJECT_LIST -> this.writePacket(new Packet.PObjectList(packet.id, this.ObjectPool()));
-                case METHOD_LIST -> this.writePacket(new Packet.PMethodList(packet.id, ((Packet.PMethodList) packet).objectId, false));
+                case METHOD_LIST -> this.writePacket(new Packet.PMethodList(packet.id, ((Packet.PMethodList) packet).oid, false));
             }
-            this.os.flush();
+            this.ostream.flush();
         } else buffer.add(packet);
     }
 
@@ -58,7 +57,7 @@ public abstract class ObjectProviderSocket implements Closeable {
         int id;
         synchronized (this) {
             id = this.writePacket(packet);
-            this.os.flush();
+            this.ostream.flush();
         }
         while (checkBuffer(id))
             Thread.onSpinWait();
@@ -70,61 +69,61 @@ public abstract class ObjectProviderSocket implements Closeable {
     }
 
     public synchronized int writePacket(Packet packet) throws IOException {
-        this.os.write(7);
+        this.ostream.write(7);
         packet.write(this);
         return packet.id;
     }
 
     public synchronized void writeARType(ARType type) throws IOException {
-        this.os.write(10);
-        this.os.writeInt(type.dim);
+        this.ostream.write(10);
+        this.ostream.writeInt(type.dim);
         this.writeEnum(type.type);
     }
 
     public synchronized void writeEnum(Enum<?> value) throws IOException {
-        this.os.write(6);
+        this.ostream.write(6);
         this.writeStringI(value.name());
     }
 
     public synchronized void writeEnum(String value) throws IOException {
-        this.os.write(6);
+        this.ostream.write(6);
         this.writeStringI(value);
     }
 
     public synchronized void writeString(String value) throws IOException {
-        this.os.write(0);
+        this.ostream.write(0);
         this.writeStringI(value);
     }
 
     protected synchronized void writeStringI(String value) throws IOException {
         var bytes = value.getBytes(StandardCharsets.UTF_8);
-        this.os.writeInt(bytes.length);
-        this.os.write(bytes);
+        this.ostream.writeInt(bytes.length);
+        this.ostream.write(bytes);
     }
 
     public synchronized void writeDouble(double value) throws IOException {
-        this.os.write(1);
-        this.os.writeDouble(value);
+        this.ostream.write(1);
+        this.ostream.writeDouble(value);
     }
 
     public synchronized void writeLong(long value) throws IOException {
-        this.os.write(2);
-        this.os.writeLong(value);
+        this.ostream.write(2);
+        this.ostream.writeLong(value);
     }
 
     public synchronized void writeInt(int value) throws IOException {
-        this.os.write(3);
-        this.os.writeInt(value);
+        this.ostream.write(3);
+        this.ostream.writeInt(value);
     }
 
     public synchronized void writeShort(short value) throws IOException {
-        this.os.write(4);
-        this.os.writeShort(value);
+        this.ostream.write(4);
+        this.ostream.writeShort(value);
     }
 
     public synchronized void writeByte(byte value) throws IOException {
-        this.os.write(5);
-        this.os.writeByte(value);
+        this.ostream.write(5);
+        this.ostream.writeByte(value);
     }
 
     public synchronized void writeBoolean(boolean value) throws IOException {
@@ -138,7 +137,7 @@ public abstract class ObjectProviderSocket implements Closeable {
 
     public synchronized ARType readARType() throws IOException {
         this.checkValue(10);
-        return new ARType(this.is.readInt(), this.readEnum(PType.class));
+        return new ARType(this.istream.readInt(), this.readEnum(PType.class));
     }
 
     @SuppressWarnings("unchecked")
@@ -163,32 +162,32 @@ public abstract class ObjectProviderSocket implements Closeable {
     }
 
     public synchronized String readStringI() throws IOException {
-        return new String(this.is.readNBytes(this.is.readInt()));
+        return new String(this.istream.readNBytes(this.istream.readInt()));
     }
 
     public synchronized double readDouble() throws IOException {
         this.checkValue(1);
-        return this.is.readDouble();
+        return this.istream.readDouble();
     }
 
     public synchronized long readLong() throws IOException {
         this.checkValue(2);
-        return this.is.readLong();
+        return this.istream.readLong();
     }
 
     public synchronized int readInt() throws IOException {
         this.checkValue(3);
-        return this.is.readInt();
+        return this.istream.readInt();
     }
 
     public synchronized short readShort() throws IOException {
         this.checkValue(4);
-        return this.is.readShort();
+        return this.istream.readShort();
     }
 
     public synchronized byte readByte() throws IOException {
         this.checkValue(5);
-        return this.is.readByte();
+        return this.istream.readByte();
     }
 
     public synchronized boolean readBoolean() throws IOException {
@@ -196,14 +195,14 @@ public abstract class ObjectProviderSocket implements Closeable {
     }
 
     protected synchronized void checkValue(int needed) throws IOException {
-        var i = this.is.read();
+        var i = this.istream.read();
         if (i != needed)
             throw new IOException("Invalid Value {" + i + "}! Required {" + needed + "}!");
     }
 
     @Override
     public void close() throws IOException {
-        this.is.close();
-        this.os.close();
+        this.istream.close();
+        this.ostream.close();
     }
 }

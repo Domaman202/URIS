@@ -5,7 +5,6 @@ import ru.DmN.ReflectionUtils;
 import java.io.IOException;
 import java.util.List;
 
-@SuppressWarnings("unused")
 public class Packet {
     public static int LAST_ID = 0;
     public final int id;
@@ -40,18 +39,18 @@ public class Packet {
     }
 
     public static class PMethodList extends Packet {
-        public final int objectId;
+        public final int oid;
         public final RemoteMethod[] methods;
 
         public PMethodList(int pid, int oid, boolean request) {
             super(pid, Type.METHOD_LIST, request);
-            this.objectId = oid;
+            this.oid = oid;
             this.methods = null;
         }
 
         public PMethodList(int pid, ObjectProviderSocket socket) throws IOException {
             super(pid, Type.METHOD_LIST, false);
-            this.objectId = socket.readInt();
+            this.oid = socket.readInt();
             var mc = socket.readInt();
             this.methods = new RemoteMethod[mc];
             for (int i = 0; i < mc; i++) {
@@ -68,10 +67,10 @@ public class Packet {
         @Override
         public void write(ObjectProviderSocket socket) throws IOException {
             super.write(socket);
-            socket.writeInt(this.objectId);
+            socket.writeInt(this.oid);
             if (this.request)
                 return;
-            var methods = ReflectionUtils.getAllMethods(socket.ObjectPool().get(this.objectId).getClass());
+            var methods = ReflectionUtils.getAllMethods(socket.ObjectPool().get(this.oid).getClass());
             socket.writeInt(methods.length);
             for (var method : methods) {
                 socket.writeString(method.getName());

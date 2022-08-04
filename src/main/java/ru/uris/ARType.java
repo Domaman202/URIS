@@ -1,8 +1,8 @@
 package ru.uris;
 
 public class ARType {
-    public int dim;
-    public PType type;
+    public final int dim;
+    public final PType type;
 
     protected ARType(int dim, PType type) {
         this.type = type;
