@@ -34,7 +34,7 @@ public class Server implements Closeable {
         }
 
         @Override
-        public List<Object> ObjectPool() {
+        public List<Object> getObjectPool() {
             return Server.this.objectPool;
         }
     }

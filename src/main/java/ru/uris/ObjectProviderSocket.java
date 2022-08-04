@@ -23,7 +23,7 @@ public abstract class ObjectProviderSocket implements Closeable {
         this.ostream = new DataOutputStream(socket.getOutputStream());
     }
 
-    public abstract List<Object> ObjectPool();
+    public abstract List<Object> getObjectPool();
 
     public Thread createListener() {
         return this.listener == null ?
@@ -46,7 +46,7 @@ public abstract class ObjectProviderSocket implements Closeable {
             switch (packet.type) {
                 case HELLO -> this.writePacket(new Packet(packet.id, Packet.Type.HELLO, false));
                 case CLOSE -> this.close();
-                case OBJECT_LIST -> this.writePacket(new Packet.PObjectList(packet.id, this.ObjectPool()));
+                case OBJECT_LIST -> this.writePacket(new Packet.PObjectList(packet.id, this.getObjectPool()));
                 case METHOD_LIST -> this.writePacket(new Packet.PMethodList(packet.id, ((Packet.PMethodList) packet).oid, false));
             }
             this.ostream.flush();

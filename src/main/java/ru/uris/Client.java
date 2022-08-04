@@ -13,7 +13,7 @@ public class Client extends ObjectProviderSocket {
     }
 
     @Override
-    public List<Object> ObjectPool() {
+    public List<Object> getObjectPool() {
         return this.objectPool;
     }
 

@@ -70,7 +70,7 @@ public class Packet {
             socket.writeInt(this.oid);
             if (this.request)
                 return;
-            var methods = ReflectionUtils.getAllMethods(socket.ObjectPool().get(this.oid).getClass());
+            var methods = ReflectionUtils.getAllMethods(socket.getObjectPool().get(this.oid).getClass());
             socket.writeInt(methods.length);
             for (var method : methods) {
                 socket.writeString(method.getName());
