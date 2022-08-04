@@ -24,7 +24,8 @@ abstract class ObjectProviderSocket(@JvmField protected val socket: Socket) : Cl
     @JvmField
     protected var listener: Thread? = null
 
-    abstract fun ObjectPool(): List<Any>
+    open val objectPool
+        get(): List<Any> = throw NotImplementedError()
 
     fun createListener(): Thread {
         return (if (listener == null) {
@@ -51,7 +52,7 @@ abstract class ObjectProviderSocket(@JvmField protected val socket: Socket) : Cl
             when (packet.type) {
                 Packet.Type.HELLO -> writePacket(Packet(packet.id, Packet.Type.HELLO, false))
                 Packet.Type.CLOSE -> close()
-                Packet.Type.OBJECT_LIST -> writePacket(Packet.Companion.PObjectList(packet.id, ObjectPool()))
+                Packet.Type.OBJECT_LIST -> writePacket(Packet.Companion.PObjectList(packet.id, this.objectPool))
                 Packet.Type.METHOD_LIST -> writePacket(
                     Packet.Companion.PMethodList(
                         packet.id,
@@ -264,6 +265,7 @@ abstract class ObjectProviderSocket(@JvmField protected val socket: Socket) : Cl
             throw IOException("Invalid Value {$i}! Required {$needed}!")
     }
 
+    @Synchronized
     override fun close() {
         this.istream.close()
         this.ostream.close()

@@ -5,13 +5,9 @@ import java.io.IOException
 import java.net.Socket
 
 open class Client(host: String?, port: Int) : ObjectProviderSocket(Socket(host, port)) {
-    @JvmField
-    val objectPool = ArrayList<Any>()
+    override val objectPool = ArrayList<Any>()
 
-    override fun ObjectPool(): List<Any> {
-        return objectPool
-    }
-
+    @Synchronized
     @Throws(IOException::class)
     override fun close() {
         if (!socket.isClosed) {

@@ -26,8 +26,7 @@ open class Server(port: Int) : Closeable {
     }
 
     inner class Connection(socket: Socket) : ObjectProviderSocket(socket), AutoCloseable {
-        override fun ObjectPool(): List<Any> {
-            return objectPool
-        }
+        override val objectPool: List<Any>
+            get() = this@Server.objectPool
     }
 }

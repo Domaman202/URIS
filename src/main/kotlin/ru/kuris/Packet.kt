@@ -64,7 +64,7 @@ open class Packet(@JvmField val id: Int, @JvmField val type: Type, @JvmField val
                 socket.writeInt(oid)
                 if (request)
                     return
-                val methods = socket.ObjectPool()[oid]::class.members
+                val methods = socket.objectPool[oid]::class.members
                 socket.writeInt(methods.size)
                 for (method in methods) {
                     socket.writeString(method.name)
