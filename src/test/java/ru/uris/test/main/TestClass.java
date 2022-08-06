@@ -1,4 +1,4 @@
-package ru.uris.test.java;
+package ru.uris.test.main;
 
 public record TestClass(int i) implements IAdder {
     @Override

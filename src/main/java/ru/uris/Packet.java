@@ -40,9 +40,9 @@ public class Packet {
     }
 
     public static class PMethodCall extends Packet {
-        public RemoteMethod method;
-        public Object[] args;
-        public Object result;
+        public final RemoteMethod method;
+        public final Object[] args;
+        public final Object result;
 
         public PMethodCall(int pid, RemoteMethod method, Object ... args) {
             super(pid, Type.METHOD_CALL, true);
