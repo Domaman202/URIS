@@ -6,9 +6,12 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Array;
+import java.lang.reflect.InvocationTargetException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public abstract class ObjectProviderSocket implements Closeable {
     protected Socket socket;
@@ -24,6 +27,15 @@ public abstract class ObjectProviderSocket implements Closeable {
     }
 
     public abstract List<Object> getObjectPool();
+
+    public Object invokeRemoteMethod(RemoteMethod method, Object ... args) throws IOException {
+        try {
+            var obj = this.getObjectPool().get(method.obj);
+            return obj.getClass().getMethod(method.name, Arrays.stream(method.args).map(t -> t.type.map()).toList().toArray(new Class[0])).invoke(obj, args);
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            throw new IOException(e);
+        }
+    }
 
     public Thread createListener() {
         return this.listener == null ?
@@ -48,6 +60,7 @@ public abstract class ObjectProviderSocket implements Closeable {
                 case CLOSE -> this.close();
                 case OBJECT_LIST -> this.writePacket(new Packet.PObjectList(packet.id, this.getObjectPool()));
                 case METHOD_LIST -> this.writePacket(new Packet.PMethodList(packet.id, ((Packet.PMethodList) packet).oid, false));
+                case METHOD_CALL -> this.writePacket(new Packet.PMethodCall(packet.id, ((Packet.PMethodCall) packet).method, false));
             }
             this.ostream.flush();
         } else buffer.add(packet);
@@ -66,6 +79,39 @@ public abstract class ObjectProviderSocket implements Closeable {
 
     public synchronized boolean checkBuffer(int id) {
         return this.buffer.stream().noneMatch(p -> p.id == id);
+    }
+
+    public synchronized void writeObject(Object arr) throws IOException {
+        var type = ARType.of(arr);
+        var size = type.dim == 0 ? -1 : Array.getLength(arr);
+        this.ostream.writeInt(size);
+        if (size > 0) {
+            for (int i = 0; i < size; i++) {
+                this.writeObject(Array.get(arr, i));
+            }
+        } else {
+            this.writeEnum(type.type);
+            if (arr instanceof Boolean b)
+                arr = (byte) (b ? 1 : 0);
+            writeWithType(arr, type.type);
+        }
+    }
+
+    public synchronized void writeWithType(Object obj, PType type) throws IOException {
+        switch (type) {
+            case BYTE -> this.writeByte((Byte) obj);
+            case SHORT -> this.writeShort((Short) obj);
+            case INT -> this.writeInt((Integer) obj);
+            case LONG -> this.writeLong((Long) obj);
+            case DOUBLE -> this.writeDouble((Double) obj);
+            case STRING -> this.writeString((String) obj);
+            case ENUM -> this.writeEnum((Enum<?>) obj);
+            case PACKET -> this.writePacket((Packet) obj);
+            case OBJECT -> {
+                this.getObjectPool().add(obj);
+                this.ostream.writeInt(this.getObjectPool().indexOf(obj));
+            }
+        }
     }
 
     public synchronized int writePacket(Packet packet) throws IOException {
@@ -128,6 +174,30 @@ public abstract class ObjectProviderSocket implements Closeable {
 
     public synchronized void writeBoolean(boolean value) throws IOException {
         this.writeByte((byte) (value ? 1 : 0));
+    }
+
+    public synchronized Object readObject() throws IOException {
+        var size = this.istream.readInt();
+        if (size > -1) {
+            var arr = new Object[size];
+            for (int i = 0; i < size; i++)
+                Array.set(arr, i, this.readObject());
+            return arr;
+        } else {
+            var type = this.readEnum(PType.class);
+            return switch (type) {
+                case BYTE -> this.readByte();
+                case SHORT -> this.readShort();
+                case INT -> this.readInt();
+                case LONG -> this.readLong();
+                case DOUBLE -> this.readDouble();
+                case STRING -> this.readString();
+                case ENUM -> this.readEnum();
+                case PACKET -> this.readPacket();
+                case NULL -> null;
+                case OBJECT -> throw new UnsupportedOperationException(); // TODO:
+            };
+        }
     }
 
     public synchronized Packet readPacket() throws IOException {

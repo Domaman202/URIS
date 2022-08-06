@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.uris.Client;
 import ru.uris.Packet;
+import ru.uris.RemoteMethod;
 import ru.uris.Server;
 
 import java.io.IOException;
@@ -34,8 +35,15 @@ public class MainTest {
                         Arrays.toString(((Packet.PObjectList) connection.sendAndReceive(new Packet.PObjectList(Packet.nextId()))).objects),
                         Arrays.toString(((Packet.PMethodList) connection.sendAndReceive(new Packet.PMethodList(Packet.nextId(), 0, true))).methods)
                 );
-                for (var method : ((Packet.PMethodList) connection.sendAndReceive(new Packet.PMethodList(Packet.nextId(), 0, true))).methods)
+
+                RemoteMethod toString = null;
+                for (var method : ((Packet.PMethodList) connection.sendAndReceive(new Packet.PMethodList(Packet.nextId(), 0, true))).methods) {
                     SLOG.info("[NAME]{}\n[ARGS]:{}\n[RETURN]:{}", method.name, Arrays.toString(method.args), method.ret);
+                    if (method.name.equals("toString"))
+                        toString = method;
+                }
+
+//                SLOG.info("{}", connection.sendAndReceive(new Packet.PMethodCall(Packet.nextId(), toString)));
             } catch (Throwable e) {
                 throw new Error(e);
             }
@@ -55,8 +63,15 @@ public class MainTest {
                         Arrays.toString(((Packet.PObjectList) client.sendAndReceive(new Packet.PObjectList(Packet.nextId()))).objects),
                         Arrays.toString(((Packet.PMethodList) client.sendAndReceive(new Packet.PMethodList(Packet.nextId(), 0, true))).methods)
                 );
-                for (var method : ((Packet.PMethodList) client.sendAndReceive(new Packet.PMethodList(Packet.nextId(), 0, true))).methods)
-                    CLOG.info("[NAME]{}\n[ARGS]:{}\n[RETURN]:{}", method.name, Arrays.toString(method.args), method.ret);
+
+                RemoteMethod toString = null;
+                for (var method : ((Packet.PMethodList) client.sendAndReceive(new Packet.PMethodList(Packet.nextId(), 0, true))).methods) {
+                    SLOG.info("[NAME]{}\n[ARGS]:{}\n[RETURN]:{}", method.name, Arrays.toString(method.args), method.ret);
+                    if (method.name.equals("toString"))
+                        toString = method;
+                }
+
+                CLOG.info("{}", client.sendAndReceive(new Packet.PMethodCall(Packet.nextId(), toString)));
             } catch (Throwable e) {
                 throw new Error(e);
             }

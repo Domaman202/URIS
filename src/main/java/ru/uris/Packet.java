@@ -29,6 +29,7 @@ public class Packet {
             case HELLO, CLOSE -> new Packet(id, type, request);
             case OBJECT_LIST -> request ? new PObjectList(id) : new PObjectList(id, socket);
             case METHOD_LIST -> request ? new Packet.PMethodList(id, socket.readInt(), true) : new PMethodList(id, socket);
+            case METHOD_CALL -> new PMethodCall(id, socket, request);
         };
     }
 
@@ -36,6 +37,55 @@ public class Packet {
         socket.writeInt(id);
         socket.writeEnum(this.type);
         socket.writeBoolean(this.request);
+    }
+
+    public static class PMethodCall extends Packet {
+        public final RemoteMethod method;
+        public final Object[] args;
+        public final Object result;
+
+        public PMethodCall(int pid, RemoteMethod method, Object ... args) {
+            super(pid, Type.METHOD_CALL, true);
+            this.method = method;
+            this.args = args;
+            this.result = null;
+        }
+
+        public PMethodCall(int pid, ObjectProviderSocket socket, boolean request) throws IOException {
+            super(pid, Type.METHOD_CALL, request);
+            if (request) {
+                var obj = socket.readInt();
+                var name = socket.readString();
+                var l = socket.readInt();
+                var args = new ARType[l];
+                for (int i = 0; i < l; i++)
+                    args[i] = socket.readARType();
+                var ret = socket.readARType();
+                this.args = (Object[]) socket.readObject();
+                this.method = new RemoteMethod(name, args, ret, obj);
+                this.result = null;
+            } else {
+                this.method = null;
+                this.args = null;
+                this.result = socket.readObject();
+            }
+        }
+
+        @Override
+        public void write(ObjectProviderSocket socket) throws IOException {
+            super.write(socket);
+            if (this.request) {
+                socket.writeInt(this.method.obj);
+                socket.writeString(this.method.name);
+                socket.writeInt(this.method.args.length);
+                for (var arg : this.method.args)
+                    socket.writeARType(arg);
+                socket.writeARType(this.method.ret);
+                socket.writeObject(this.args);
+            } else {
+                socket.writeObject(socket.invokeRemoteMethod(this.method, this.args));
+            }
+        }
     }
 
     public static class PMethodList extends Packet {
@@ -60,7 +110,7 @@ public class Packet {
                 for (int j = 0; j < ac; j++) {
                     args[j] = socket.readARType();
                 }
-                this.methods[i] = new RemoteMethod(name, args, socket.readARType());
+                this.methods[i] = new RemoteMethod(name, args, socket.readARType(),  this.oid);
             }
         }
 
@@ -121,6 +171,8 @@ public class Packet {
         CLOSE,
 
         OBJECT_LIST,
-        METHOD_LIST
+        METHOD_LIST,
+
+        METHOD_CALL
     }
 }

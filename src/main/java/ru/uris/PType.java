@@ -39,4 +39,19 @@ public enum PType {
             return NULL;
         return OBJECT;
     }
+
+    public Class<?> map() {
+        return switch (this) {
+            case STRING -> String.class;
+            case DOUBLE -> Double.TYPE;
+            case LONG -> Long.TYPE;
+            case INT -> Integer.TYPE;
+            case SHORT -> Short.TYPE;
+            case BYTE -> Byte.TYPE;
+            case ENUM -> Enum.class;
+            case PACKET -> Packet.class;
+            case OBJECT -> Object.class;
+            case NULL -> Void.TYPE;
+        };
+    }
 }
