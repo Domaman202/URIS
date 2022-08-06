@@ -60,7 +60,7 @@ public abstract class ObjectProviderSocket implements Closeable {
                 case CLOSE -> this.close();
                 case OBJECT_LIST -> this.writePacket(new Packet.PObjectList(packet.id, this.getObjectPool()));
                 case METHOD_LIST -> this.writePacket(new Packet.PMethodList(packet.id, ((Packet.PMethodList) packet).oid, false));
-                case METHOD_CALL -> this.writePacket(new Packet.PMethodCall(packet.id, ((Packet.PMethodCall) packet).method, false));
+                case METHOD_CALL -> this.writePacket(new Packet.PMethodCall((Packet.PMethodCall) packet));
             }
             this.ostream.flush();
         } else buffer.add(packet);

@@ -40,9 +40,9 @@ public class Packet {
     }
 
     public static class PMethodCall extends Packet {
-        public final RemoteMethod method;
-        public final Object[] args;
-        public final Object result;
+        public RemoteMethod method;
+        public Object[] args;
+        public Object result;
 
         public PMethodCall(int pid, RemoteMethod method, Object ... args) {
             super(pid, Type.METHOD_CALL, true);
@@ -69,6 +69,13 @@ public class Packet {
                 this.args = null;
                 this.result = socket.readObject();
             }
+        }
+
+        public PMethodCall(PMethodCall request) {
+            super(request.id, Type.METHOD_CALL, false);
+            this.method = request.method;
+            this.args = request.args;
+            this.result = null;
         }
 
         @Override
