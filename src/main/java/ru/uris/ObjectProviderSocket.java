@@ -85,7 +85,7 @@ public abstract class ObjectProviderSocket implements Closeable {
         var type = ARType.of(arr);
         var size = type.dim == 0 ? -1 : Array.getLength(arr);
         this.ostream.writeInt(size);
-        if (size > 0) {
+        if (size > -1) {
             for (int i = 0; i < size; i++) {
                 this.writeObject(Array.get(arr, i));
             }
