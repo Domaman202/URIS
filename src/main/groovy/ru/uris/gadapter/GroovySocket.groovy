@@ -5,7 +5,7 @@ import ru.uris.RemoteMethod
 
 trait GroovySocket {
     Object invokeRemoteMethod(RemoteMethod method, Object... args) throws IOException {
-        return this.getObjectPool().get(method.obj).invokeMethod(method.name, method.args)
+        return this.getObjectPool().get(method.obj).invokeMethod(method.name, args)
     }
 
     synchronized <T extends Enum<T>> T readEnum(Class<T> clazz) throws IOException {
