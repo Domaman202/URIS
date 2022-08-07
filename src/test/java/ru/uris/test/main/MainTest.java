@@ -4,6 +4,7 @@ import org.apache.log4j.FileAppender;
 import org.apache.log4j.PatternLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ru.DmN.Lazy;
 import ru.uris.*;
 import ru.uris.test.java.TestImpl;
 
@@ -77,7 +78,7 @@ public class MainTest {
         var robj = socket.createRemoteObject(1);
         logger.info("{}\n{}",
                 robj.invoke("toString"),
-                robj.invoke("add", 4)
+                ((Lazy<?>) robj.invoke("add", 4)).get()
         );
     }
 

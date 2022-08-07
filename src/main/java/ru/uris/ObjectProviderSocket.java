@@ -1,5 +1,7 @@
 package ru.uris;
 
+import ru.DmN.Lazy;
+
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -26,6 +28,16 @@ public abstract class ObjectProviderSocket implements Closeable {
     }
 
     public abstract List<Object> getObjectPool();
+
+    public Lazy<RemoteObject> createLazyRemoteObject(int id) {
+        return new Lazy<>(() -> {
+            try {
+                return this.createRemoteObject(id);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
 
     public RemoteObject createRemoteObject(int id) throws IOException {
         var methods = ((Packet.PMethodList) this.sendAndReceive(new Packet.PMethodList(Packet.nextId(), id, true))).methods;
@@ -199,7 +211,7 @@ public abstract class ObjectProviderSocket implements Closeable {
                 case ENUM -> this.readEnum();
                 case PACKET -> this.readPacket();
                 case NULL -> null;
-                case OBJECT -> this.createRemoteObject(this.istream.readInt());
+                case OBJECT -> this.createLazyRemoteObject(this.istream.readInt());
             };
         }
     }
