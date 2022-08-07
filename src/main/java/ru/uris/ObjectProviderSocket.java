@@ -29,7 +29,7 @@ public abstract class ObjectProviderSocket implements Closeable {
 
     public RemoteObject createRemoteObject(int id) throws IOException {
         var methods = ((Packet.PMethodList) this.sendAndReceive(new Packet.PMethodList(Packet.nextId(), id, true))).methods;
-        return new RemoteObject(id, methods);
+        return new RemoteObjectImpl(id, methods);
     }
 
     public Object invokeRemoteMethod(RemoteMethod method, Object ... args) throws IOException {
@@ -280,11 +280,15 @@ public abstract class ObjectProviderSocket implements Closeable {
         this.ostream.close();
     }
 
-    public class RemoteObject {
+    public interface RemoteObject {
+        Object invoke(String name, Object ... args) throws IOException, NoSuchMethodException;
+    }
+
+    public class RemoteObjectImpl implements RemoteObject {
         public final int id;
         public final RemoteMethod[] methods;
 
-        public RemoteObject(int id, RemoteMethod[] methods) {
+        public RemoteObjectImpl(int id, RemoteMethod[] methods) {
             this.id = id;
             this.methods = methods;
         }

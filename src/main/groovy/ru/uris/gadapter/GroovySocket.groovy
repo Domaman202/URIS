@@ -1,5 +1,6 @@
 package ru.uris.gadapter
 
+import ru.uris.ObjectProviderSocket
 import ru.uris.RemoteMethod
 
 trait GroovySocket {
@@ -15,5 +16,9 @@ trait GroovySocket {
         } catch (Throwable e) {
             throw new IOException(e);
         }
+    }
+
+    ObjectProviderSocket.RemoteObject createRemoteObject(int id) throws IOException {
+        return new GroovyRemoteObjectImpl(this, id)
     }
 }
