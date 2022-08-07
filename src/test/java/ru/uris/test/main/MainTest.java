@@ -41,6 +41,9 @@ public class MainTest {
             // Client
             try (var client = cs.supply("localhost", 2014)) {
                 client.objectPool.add(new Object());
+                client.objectPool.add(new TestClass(21));
+                client.objectPool.add(TestImpl.class.getClassLoader());
+
                 MainTest.test(client, CLOG);
             } catch (Throwable e) {
                 throw new Error(e);
@@ -71,8 +74,11 @@ public class MainTest {
 
         logger.info("{}", ((Packet.PMethodCall) socket.sendAndReceive(new Packet.PMethodCall(Packet.nextId(), toString))).result);
 
-        var robj = socket.createRemoteObject(0);
-        logger.info("{}", robj.invoke("toString"));
+        var robj = socket.createRemoteObject(1);
+        logger.info("{}\n{}",
+                robj.invoke("toString"),
+                robj.invoke("add", 4)
+        );
     }
 
     @FunctionalInterface

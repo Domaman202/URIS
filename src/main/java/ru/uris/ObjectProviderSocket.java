@@ -199,7 +199,7 @@ public abstract class ObjectProviderSocket implements Closeable {
                 case ENUM -> this.readEnum();
                 case PACKET -> this.readPacket();
                 case NULL -> null;
-                case OBJECT -> throw new UnsupportedOperationException(); // TODO:
+                case OBJECT -> this.createRemoteObject(this.istream.readInt());
             };
         }
     }
@@ -305,7 +305,7 @@ public abstract class ObjectProviderSocket implements Closeable {
                         if (method.args[i].equals(argt[i]))
                             j++;
                     if (j == argt.length)
-                        return ObjectProviderSocket.this.invokeRemoteMethod(method, args);
+                        return ((Packet.PMethodCall) ObjectProviderSocket.this.sendAndReceive(new Packet.PMethodCall(Packet.nextId(), method, args))).result;
                 }
             }
             throw new NoSuchMethodException("Unknown method: " + name);

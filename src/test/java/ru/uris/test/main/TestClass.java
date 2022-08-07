@@ -1,12 +1,18 @@
 package ru.uris.test.main;
 
-public record TestClass(int i) implements IAdder {
+public record TestClass(int i) implements INumber {
     @Override
-    public int add(int j) {
-        return i + j;
+    public INumber add(int j) {
+        return new TestClass(i + j);
     }
 
-    public void print(Object value) {
-        System.out.println(value);
+    @Override
+    public int toInt() {
+        return i;
+    }
+
+    @Override
+    public String toString() {
+        return "TestClass(" + i + ")";
     }
 }
