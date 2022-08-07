@@ -27,23 +27,8 @@ public class MainTest {
 
                 // Set client flag
                 flag = true;
-                //
-                var connection = server.accept();
-                connection.createListener().start();
 
-                SLOG.info("{}\n{}",
-                        Arrays.toString(((Packet.PObjectList) connection.sendAndReceive(new Packet.PObjectList(Packet.nextId()))).objects),
-                        Arrays.toString(((Packet.PMethodList) connection.sendAndReceive(new Packet.PMethodList(Packet.nextId(), 0, true))).methods)
-                );
-
-                RemoteMethod toString = null;
-                for (var method : ((Packet.PMethodList) connection.sendAndReceive(new Packet.PMethodList(Packet.nextId(), 0, true))).methods) {
-                    SLOG.info("[NAME]{}\n[ARGS]:{}\n[RETURN]:{}", method.name, Arrays.toString(method.args), method.ret);
-                    if (method.name.equals("toString"))
-                        toString = method;
-                }
-
-                SLOG.info("{}", ((Packet.PMethodCall) connection.sendAndReceive(new Packet.PMethodCall(Packet.nextId(), toString))).result);
+                MainTest.test(server.accept(), SLOG);
             } catch (Throwable e) {
                 throw new Error(e);
             }

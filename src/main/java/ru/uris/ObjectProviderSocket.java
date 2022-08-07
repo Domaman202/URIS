@@ -11,7 +11,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public abstract class ObjectProviderSocket implements Closeable {
     protected Socket socket;
@@ -27,6 +26,11 @@ public abstract class ObjectProviderSocket implements Closeable {
     }
 
     public abstract List<Object> getObjectPool();
+
+    public RemoteObject createRemoteObject(int id) throws IOException {
+        var methods = ((Packet.PMethodList) this.sendAndReceive(new Packet.PMethodList(Packet.nextId(), id, true))).methods;
+        return new RemoteObject(id, methods);
+    }
 
     public Object invokeRemoteMethod(RemoteMethod method, Object ... args) throws IOException {
         try {
@@ -274,5 +278,33 @@ public abstract class ObjectProviderSocket implements Closeable {
     public synchronized void close() throws IOException {
         this.istream.close();
         this.ostream.close();
+    }
+
+    public class RemoteObject {
+        public final int id;
+        public final RemoteMethod[] methods;
+
+        public RemoteObject(int id, RemoteMethod[] methods) {
+            this.id = id;
+            this.methods = methods;
+        }
+
+        public Object invoke(String name, Object ... args) throws IOException, NoSuchMethodException {
+            var argt = new ARType[args.length];
+            for (int i = 0; i < args.length; i++)
+                argt[i] = ARType.of(args[i]);
+
+            for (var method : this.methods) {
+                if (method.args.length == argt.length) {
+                    var j = 0;
+                    for (int i = 0; i < argt.length; i++)
+                        if (method.args[i].equals(argt[i]))
+                            j++;
+                    if (j == argt.length)
+                        return ObjectProviderSocket.this.invokeRemoteMethod(method, args);
+                }
+            }
+            throw new NoSuchMethodException("Unknown method: " + name);
+        }
     }
 }

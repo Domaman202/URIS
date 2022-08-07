@@ -22,6 +22,13 @@ public class ARType {
     }
 
     @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof ARType type)
+            return this.dim == type.dim && this.type == type.type;
+        return false;
+    }
+
+    @Override
     public String toString() {
         return "<" + this.type + "[" + this.dim + "]" + ">";
     }
