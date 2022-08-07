@@ -295,7 +295,7 @@ public abstract class ObjectProviderSocket implements Closeable {
                 argt[i] = ARType.of(args[i]);
 
             for (var method : this.methods) {
-                if (method.args.length == argt.length) {
+                if (method.name.equals(name) && method.args.length == argt.length) {
                     var j = 0;
                     for (int i = 0; i < argt.length; i++)
                         if (method.args[i].equals(argt[i]))

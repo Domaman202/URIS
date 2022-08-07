@@ -54,7 +54,7 @@ public class MainTest {
         clientThread.join(5000);
     }
 
-    public static void test(ObjectProviderSocket socket, Logger logger) throws IOException {
+    public static void test(ObjectProviderSocket socket, Logger logger) throws IOException, NoSuchMethodException {
         socket.createListener().start();
 
         logger.info("{}\n{}",
@@ -70,6 +70,9 @@ public class MainTest {
         }
 
         logger.info("{}", ((Packet.PMethodCall) socket.sendAndReceive(new Packet.PMethodCall(Packet.nextId(), toString))).result);
+
+        var robj = socket.createRemoteObject(0);
+        logger.info("{}", robj.invoke("toString"));
     }
 
     @FunctionalInterface
