@@ -13,6 +13,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public abstract class ObjectProviderSocket implements Closeable {
     protected Socket socket;
@@ -28,21 +29,6 @@ public abstract class ObjectProviderSocket implements Closeable {
     }
 
     public abstract List<Object> getObjectPool();
-
-    public Lazy<RemoteObject> createLazyRemoteObject(int id) {
-        return new Lazy<>(() -> {
-            try {
-                return this.createRemoteObject(id);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        });
-    }
-
-    public RemoteObject createRemoteObject(int id) throws IOException {
-        var methods = ((Packet.PMethodList) this.sendAndReceive(new Packet.PMethodList(Packet.nextId(), id, true))).methods;
-        return new RemoteObjectImpl(id, methods);
-    }
 
     public Object invokeRemoteMethod(RemoteMethod method, Object ... args) throws IOException {
         try {
@@ -211,7 +197,7 @@ public abstract class ObjectProviderSocket implements Closeable {
                 case ENUM -> this.readEnum();
                 case PACKET -> this.readPacket();
                 case NULL -> null;
-                case OBJECT -> this.createLazyRemoteObject(this.istream.readInt());
+                case OBJECT -> new RemoteObjectImpl(this.istream.readInt());
             };
         }
     }
@@ -298,14 +284,20 @@ public abstract class ObjectProviderSocket implements Closeable {
 
     public class RemoteObjectImpl implements RemoteObject {
         public final int id;
-        public final RemoteMethod[] methods;
+        public RemoteMethod[] methods;
 
-        public RemoteObjectImpl(int id, RemoteMethod[] methods) {
+        public RemoteObjectImpl(int id) {
             this.id = id;
-            this.methods = methods;
+        }
+
+        public void init() throws IOException {
+            this.methods = ((Packet.PMethodList) ObjectProviderSocket.this.sendAndReceive(new Packet.PMethodList(Packet.nextId(), id, true))).methods;
         }
 
         public Object invoke(String name, Object ... args) throws IOException, NoSuchMethodException {
+            if (this.methods == null)
+                this.init();
+
             var argt = new ARType[args.length];
             for (int i = 0; i < args.length; i++)
                 argt[i] = ARType.of(args[i]);

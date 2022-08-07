@@ -75,10 +75,10 @@ public class MainTest {
 
         logger.info("{}", ((Packet.PMethodCall) socket.sendAndReceive(new Packet.PMethodCall(Packet.nextId(), toString))).result);
 
-        var robj = socket.createRemoteObject(1);
+        var robj = socket.new RemoteObjectImpl(1);
         logger.info("{}\n{}",
                 robj.invoke("toString"),
-                ((Lazy<?>) robj.invoke("add", 4)).get()
+                ((ObjectProviderSocket.RemoteObject) robj.invoke("add", 4)).invoke("toInt")
         );
     }
 
