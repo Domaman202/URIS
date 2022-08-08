@@ -35,53 +35,48 @@ public abstract class ObjectProviderSocket implements Closeable {
 
     public abstract List<Object> getObjectPool();
 
-    public Object invokeRemoteMethod(RemoteMethod method, Object ... args) throws IOException {
+    public Object invokeRemoteMethod(RemoteMethod m, Object ... args) throws IOException {
         try {
-            var obj = this.getObjectPool().get(method.obj);
-//            return obj.getClass().getMethod(method.name, Arrays.stream(method.args).map(t -> t.type.map()).toList().toArray(new Class[0])).invoke(obj, args);
-            return invokeRemoteMethod(method, obj, args);
+            var obj = this.getObjectPool().get(m.obj);
+            for (var method : ReflectionUtils.getAllMethods(obj.getClass())) {
+                if (ARType.of(method.getReturnType()).equals(m.ret) && method.getParameterCount() == args.length) {
+                    var ec = 0;
+                    for (int i = 0; i < m.args.length; i++) {
+                        var argt = ARType.of(method.getParameterTypes()[i]);
+                        if (argt.equals(m.args[i])) {
+                            if (m.args[i].type == PType.OBJECT) {
+                                var robj = (RemoteObject) args[i];
+                                var robj_methods = robj.getMethods();
+                                var needed_methods = ReflectionUtils.getAllMethods(method.getParameterTypes()[i]);
+
+                                var mec = 0;
+                                for (var rm : robj_methods) {
+                                    for (var nm : needed_methods) {
+                                        if (rm.equals(nm)) {
+                                            mec++;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if (mec >= needed_methods.length)
+                                    ec++;
+                            } else ec++;
+                        }
+                    }
+
+                    if (ec == m.args.length) {
+                        for (int i = 0; i < args.length; i++)
+                            if (m.args[i].type == PType.OBJECT)
+                                args[i] = ((RemoteObject) args[i]).toProxy(method.getParameterTypes()[i]);
+                        return method.invoke(obj, args);
+                    }
+                }
+            }
+            throw new NoSuchMethodException();
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new IOException(e);
         }
-    }
-
-    public static Object invokeRemoteMethod(RemoteMethod m, Object obj, Object ... args) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, IOException {
-        for (var method : ReflectionUtils.getAllMethods(obj.getClass())) {
-            if (ARType.of(method.getReturnType()).equals(m.ret) && method.getParameterCount() == args.length) {
-                var ec = 0;
-                for (int i = 0; i < m.args.length; i++) {
-                    var argt = ARType.of(method.getParameterTypes()[i]);
-                    if (argt.equals(m.args[i])) {
-                        if (m.args[i].type == PType.OBJECT) {
-                            var robj = (RemoteObject) args[i];
-                            var robj_methods = robj.getMethods();
-                            var needed_methods = ReflectionUtils.getAllMethods(method.getParameterTypes()[i]);
-
-                            var mec = 0;
-                            for (var rm : robj_methods) {
-                                for (var nm : needed_methods) {
-                                    if (rm.equals(nm)) {
-                                        mec++;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (mec >= needed_methods.length)
-                                ec++;
-                        } else ec++;
-                    }
-                }
-
-                if (ec == m.args.length) {
-                    for (int i = 0; i < args.length; i++)
-                        if (m.args[i].type == PType.OBJECT)
-                            args[i] = ((RemoteObject) args[i]).toProxy(method.getParameterTypes()[i]);
-                    return method.invoke(obj, args);
-                }
-            }
-        }
-        throw new NoSuchMethodException();
     }
 
 
