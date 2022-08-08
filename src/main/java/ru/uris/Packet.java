@@ -33,6 +33,9 @@ public class Packet {
         };
     }
 
+    public void preWrite(ObjectProviderSocket socket) throws IOException {
+    }
+
     public void write(ObjectProviderSocket socket) throws IOException {
         socket.writeInt(id);
         socket.writeEnum(this.type);
@@ -42,7 +45,7 @@ public class Packet {
     public static class PMethodCall extends Packet {
         public final RemoteMethod method;
         public final Object[] args;
-        public final Object result;
+        public Object result;
 
         public PMethodCall(int pid, RemoteMethod method, Object ... args) {
             super(pid, Type.METHOD_CALL, true);
@@ -65,8 +68,9 @@ public class Packet {
                 this.method = new RemoteMethod(name, args, ret, obj);
                 this.result = null;
             } else {
-                this.method = null;
-                this.args = null;
+                var packet = (PMethodCall) socket.metabuffer.stream().filter(p -> p.id == this.id).findFirst().orElseThrow(IOException::new);
+                this.method = packet.method;
+                this.args = packet.args;
                 this.result = socket.readObject();
             }
         }
@@ -76,6 +80,11 @@ public class Packet {
             this.method = request.method;
             this.args = request.args;
             this.result = null;
+        }
+
+        @Override
+        public void preWrite(ObjectProviderSocket socket) throws IOException {
+            this.result = socket.invokeRemoteMethod(this.method, this.args);
         }
 
         @Override
@@ -89,8 +98,9 @@ public class Packet {
                     socket.writeARType(arg);
                 socket.writeARType(this.method.ret);
                 socket.writeObject(this.args);
+                socket.metabuffer.add(this);
             } else {
-                socket.writeObject(socket.invokeRemoteMethod(this.method, this.args));
+                socket.writeObject(this.result);
             }
         }
     }

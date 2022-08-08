@@ -1,6 +1,6 @@
 package ru.uris;
 
-import ru.DmN.Lazy;
+import ru.DmN.ReflectionUtils;
 
 import java.io.Closeable;
 import java.io.DataInputStream;
@@ -10,9 +10,13 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public abstract class ObjectProviderSocket implements Closeable {
@@ -20,6 +24,7 @@ public abstract class ObjectProviderSocket implements Closeable {
     protected DataInputStream istream;
     protected DataOutputStream ostream;
     public final List<Packet> buffer = new ArrayList<>();
+    public final List<Packet> metabuffer = new ArrayList<>();
     protected Thread listener;
 
     public ObjectProviderSocket(Socket socket) throws IOException {
@@ -33,11 +38,53 @@ public abstract class ObjectProviderSocket implements Closeable {
     public Object invokeRemoteMethod(RemoteMethod method, Object ... args) throws IOException {
         try {
             var obj = this.getObjectPool().get(method.obj);
-            return obj.getClass().getMethod(method.name, Arrays.stream(method.args).map(t -> t.type.map()).toList().toArray(new Class[0])).invoke(obj, args);
+//            return obj.getClass().getMethod(method.name, Arrays.stream(method.args).map(t -> t.type.map()).toList().toArray(new Class[0])).invoke(obj, args);
+            return invokeRemoteMethod(method, obj, args);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new IOException(e);
         }
     }
+
+    public static Object invokeRemoteMethod(RemoteMethod m, Object obj, Object ... args) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, IOException {
+        for (var method : ReflectionUtils.getAllMethods(obj.getClass())) {
+            if (ARType.of(method.getReturnType()).equals(m.ret) && method.getParameterCount() == args.length) {
+                var ec = 0;
+                for (int i = 0; i < m.args.length; i++) {
+                    var argt = ARType.of(method.getParameterTypes()[i]);
+                    if (argt.equals(m.args[i])) {
+                        if (m.args[i].type == PType.OBJECT) {
+                            var robj = (RemoteObject) args[i];
+                            var robj_methods = robj.getMethods();
+                            var needed_methods = ReflectionUtils.getAllMethods(method.getParameterTypes()[i]);
+
+                            var mec = 0;
+                            for (var rm : robj_methods) {
+                                for (var nm : needed_methods) {
+                                    if (rm.equals(nm)) {
+                                        mec++;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (mec >= needed_methods.length)
+                                ec++;
+                        } else ec++;
+                    }
+                }
+
+                if (ec == m.args.length) {
+                    for (int i = 0; i < args.length; i++)
+                        if (m.args[i].type == PType.OBJECT)
+                            args[i] = ((RemoteObject) args[i]).toProxy(method.getParameterTypes()[i]);
+                    return method.invoke(obj, args);
+                }
+            }
+        }
+        throw new NoSuchMethodException();
+    }
+
+
 
     public Thread createListener() {
         return this.listener == null ?
@@ -57,14 +104,30 @@ public abstract class ObjectProviderSocket implements Closeable {
     public synchronized void listen() throws IOException {
         var packet = this.readPacket();
         if (packet.request) {
+            Packet forWrite = null;
             switch (packet.type) {
-                case HELLO -> this.writePacket(new Packet(packet.id, Packet.Type.HELLO, false));
-                case CLOSE -> this.close();
-                case OBJECT_LIST -> this.writePacket(new Packet.PObjectList(packet.id, this.getObjectPool()));
-                case METHOD_LIST -> this.writePacket(new Packet.PMethodList(packet.id, ((Packet.PMethodList) packet).oid, false));
-                case METHOD_CALL -> this.writePacket(new Packet.PMethodCall((Packet.PMethodCall) packet));
+                case HELLO -> forWrite = new Packet(packet.id, Packet.Type.HELLO, false);
+                case CLOSE -> {
+                    this.close();
+                    return;
+                }
+                case OBJECT_LIST -> forWrite = new Packet.PObjectList(packet.id, this.getObjectPool());
+                case METHOD_LIST -> forWrite = new Packet.PMethodList(packet.id, ((Packet.PMethodList) packet).oid, false);
+                case METHOD_CALL -> forWrite = new Packet.PMethodCall((Packet.PMethodCall) packet);
             }
-            this.ostream.flush();
+            assert forWrite != null;
+            Packet finalForWrite = forWrite;
+            CompletableFuture.runAsync(()-> {
+                try {
+                    finalForWrite.preWrite(this);
+                    synchronized (this) {
+                        this.writePacket(finalForWrite);
+                        this.ostream.flush();
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
         } else buffer.add(packet);
     }
 
@@ -279,7 +342,13 @@ public abstract class ObjectProviderSocket implements Closeable {
     }
 
     public interface RemoteObject {
-        Object invoke(String name, Object ... args) throws IOException, NoSuchMethodException;
+        Object toProxy(Class<?> ... interfaces);
+
+        RemoteMethod[] getMethods() throws IOException;
+
+        <T> T invoke(Class<?>[] interfaces, String name, Object... args) throws IOException, NoSuchMethodException;
+
+        <T> T invokeNoProxy(String name, Object... args) throws IOException, NoSuchMethodException;
     }
 
     public class RemoteObjectImpl implements RemoteObject {
@@ -294,7 +363,37 @@ public abstract class ObjectProviderSocket implements Closeable {
             this.methods = ((Packet.PMethodList) ObjectProviderSocket.this.sendAndReceive(new Packet.PMethodList(Packet.nextId(), id, true))).methods;
         }
 
-        public Object invoke(String name, Object ... args) throws IOException, NoSuchMethodException {
+        public Object toProxy(Class<?> ... interfaces) {
+            return Proxy.newProxyInstance(getClass().getClassLoader(), interfaces, (proxy, method, args1) -> {
+                if (args1 == null)
+                    args1 = new Object[0];
+                var mrt = method.getReturnType();
+                var inters = mrt.isInterface() ? new Class[]{mrt} : mrt.getInterfaces();
+                return this.invoke(inters, method.getName(), args1);
+            });
+        }
+
+        @Override
+        public RemoteMethod[] getMethods() throws IOException {
+            if (this.methods == null)
+                this.init();
+            return this.methods;
+        }
+
+        @SuppressWarnings("unchecked")
+        public <T> T invoke(Class<?>[] interfaces, String name, Object ... args) throws IOException, NoSuchMethodException {
+            var packet = this.invokeRaw(name, args);
+            if (packet.method.ret.type == PType.OBJECT)
+                return (T) ((RemoteObject) packet.result).toProxy(interfaces);
+            return (T) packet.result;
+        }
+
+        @SuppressWarnings("unchecked")
+        public <T> T invokeNoProxy(String name, Object ... args) throws IOException, NoSuchMethodException {
+            return (T) this.invokeRaw(name, args).result;
+        }
+
+        public Packet.PMethodCall invokeRaw(String name, Object ... args) throws IOException, NoSuchMethodException {
             if (this.methods == null)
                 this.init();
 
@@ -309,7 +408,7 @@ public abstract class ObjectProviderSocket implements Closeable {
                         if (method.args[i].equals(argt[i]))
                             j++;
                     if (j == argt.length)
-                        return ((Packet.PMethodCall) ObjectProviderSocket.this.sendAndReceive(new Packet.PMethodCall(Packet.nextId(), method, args))).result;
+                        return (Packet.PMethodCall) ObjectProviderSocket.this.sendAndReceive(new Packet.PMethodCall(Packet.nextId(), method, args));
                 }
             }
             throw new NoSuchMethodException("Unknown method: " + name);
