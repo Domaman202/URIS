@@ -1,8 +1,5 @@
 package ru.uris.gadapter
 
-
-import ru.uris.RemoteMethod
-
 trait GroovySocket {
     synchronized <T extends Enum<T>> T readEnum(Class<T> clazz) throws IOException {
         this.checkValue(6);
