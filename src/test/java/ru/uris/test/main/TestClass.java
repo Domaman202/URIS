@@ -7,7 +7,7 @@ public record TestClass(int i) implements INumber {
     }
 
     @Override
-    public IAdder add(INumber j) {
+    public INumber add(INumber j) {
         return new TestClass(i + j.toInt());
     }
 

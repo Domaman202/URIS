@@ -4,9 +4,7 @@ import org.apache.log4j.FileAppender;
 import org.apache.log4j.PatternLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import ru.DmN.Lazy;
 import ru.uris.*;
-import ru.uris.test.java.TestImpl;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -24,7 +22,6 @@ public class MainTest {
             try (var server = ss.supply(2014)) {
                 server.objectPool.add(new Object());
                 server.objectPool.add(new TestClass(12));
-                server.objectPool.add(TestImpl.class.getClassLoader());
 
                 // Set client flag
                 flag = true;
@@ -36,18 +33,19 @@ public class MainTest {
         });
 
         var clientThread = new Thread(() -> {
-            // Wait server
-            while (!flag)
-                Thread.onSpinWait();
-            // Client
-            try (var client = cs.supply("localhost", 2014)) {
-                client.objectPool.add(new Object());
-                client.objectPool.add(new TestClass(21));
-                client.objectPool.add(TestImpl.class.getClassLoader());
+            if (cs != null) {
+                // Wait server
+                while (!flag)
+                    Thread.onSpinWait();
+                // Client
+                try (var client = cs.supply("localhost", 2014)) {
+                    client.objectPool.add(new Object());
+                    client.objectPool.add(new TestClass(21));
 
-                MainTest.test(client, CLOG);
-            } catch (Throwable e) {
-                throw new Error(e);
+                    MainTest.test(client, CLOG);
+                } catch (Throwable e) {
+                    throw new Error(e);
+                }
             }
         });
 
