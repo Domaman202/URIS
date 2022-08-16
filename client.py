@@ -53,6 +53,7 @@ class ObjectProviderSocket(JLSocket):
     def __init__(self, host, port):
         super().__init__(host, port)
         self.buffer = []
+        self.metabuffer = []
         self.listener = None
         self.lock = threading.Lock()
 
@@ -96,6 +97,38 @@ class ObjectProviderSocket(JLSocket):
                 return False
         return True
 
+    def sendObject(self, arr):
+        t = ARType.of(arr)
+        size = -1 if t.dim == 0 else arr.__len__()
+        self.sendInt(size)
+        if size > -1:
+            for i in range(0, size):
+                self.sendObject(arr[i])
+        else:
+            self.sendEnum(t.type)
+            if (isinstance(arr, bool)):
+                arr = 1 if arr else 0
+            self.writeWithType(arr, t.type)
+    def writeWithType(self, obj, t):
+        if t == PType.BYTE:
+            self.sendByte(obj)
+        elif t == PType.SHORT:
+            self.sendShort(obj)
+        elif t == PType.INT:
+            self.sendInt(obj)
+        elif t == PType.LONG:
+            self.sendLong(obj)
+        elif t == PType.DOUBLE:
+            self.sendDouble(obj)
+        elif t == PType.STRING:
+            self.sendString(obj)
+        elif t == PType.ENUM:
+            self.sendEnum(obj)
+        elif t == PType.PACKET:
+            self.sendPacket(obj)
+        elif t == PType.OBJECT:
+            self.objectPool.append(obj)
+            self.sendInt0(self.objectPool.index(obj))
     def sendPacket(self, packet) -> int:
         self.lock.acquire()
         self.sendByte0(7)
@@ -133,6 +166,37 @@ class ObjectProviderSocket(JLSocket):
         else:
             self.sendByte(0)
 
+    def readObject(self):
+        size = self.readInt0()
+        if (size > -1):
+            arr = []
+            for i in range(0, size):
+                arr[i] = self.readObject()
+            return arr
+        else:
+            t = self.readEnum(PType)
+            if (t == PType.BYTE):
+                return self.readByte()
+            if (t == PType.SHORT):
+                return self.readShort()
+            if (t == PType.INT):
+                return self.readInt()
+            if (t == PType.LONG):
+                return self.readLong()
+            if (t == PType.DOUBLE):
+                return self.readDouble()
+            if (t == PType.STRING):
+                return self.readString()
+            if (t == PType.ENUM):
+                self.checkValue(6)
+                return self.readString0()
+            if (t == PType.PACKET):
+                return self.readPacket()
+            if (t == Ptype.NULL):
+                return None
+            if (t == PType.OBJECT):
+                return RemoteObjectImpl(self.readInt0()) # TODO:
+            raise Exception("Invalid type!")
     def readPacket(self):
         self.checkValue(7)
         return Packet.read(self)
@@ -204,7 +268,13 @@ class Packet:
                 return PMethodList(id, sock.readInt(), True)
             else:
                 return PMethodList.create0(id, sock)
+        if t == Packet.Type.METHOD_CALL:
+            return PMethodCall.create1(id, sock, request)
+        raise Exception("Invalid packet №{}!".format(id))
     
+    def preWrite(self, sock):
+        pass
+
     def write(self, sock):
         sock.sendInt(self.id)
         sock.sendEnum(self.type)
@@ -213,8 +283,11 @@ class Packet:
     class Type(Enum):
         HELLO = "HELLO"
         CLOSE = "CLOSE"
+        #
         OBJECT_LIST = "OBJECT_LIST"
         METHOD_LIST = "METHOD_LIST"
+        #
+        METHOD_CALL = "METHOD_CALL"
 
 class PMethodList(Packet):
     def __init__(self, pid: int, oid: int, request: bool):
@@ -230,7 +303,7 @@ class PMethodList(Packet):
             args = []
             for j in range(0, sock.readInt()):
                 args.append(sock.readARType())
-            instance.methods.append(RemoteMethod(name, args, sock.readARType()))
+            instance.methods.append(RemoteMethod(name, args, sock.readARType(), instance.objectId))
         return instance
     
     def write(self, sock):
@@ -273,17 +346,73 @@ class PObjectList(Packet):
             for e in self.objects:
                 sock.sendLong(e)
 
+class PMethodCall(Packet):
+    def __init__(self, id: int, method, args, result, request: bool):
+        super().__init__(id, Packet.Type.METHOD_CALL, request)
+        self.method = method
+        self.args = args
+        self.result = result
+
+    def create0(id: int, method, args):
+        return PMethodCall(id, method, args, None, True)
+    
+    def create1(id: int, sock: ObjectProviderSocket, request: bool):
+        instance = PMethodCall(id, None, None, None, request)
+        if (request):
+            obj = sock.readInt()
+            name = sock.readString()
+            l = sock.readInt()
+            args = []
+            for i in range(0, l):
+                args[i] = sock.readARType()
+            ret = sock.readARType()
+            instance.args = sock.readObject()
+            instance.method = RemoteMethod(name, args, ret, obj) # TODO:
+            instance.result = None
+        else:
+            packet = [e for e in sock.metabuffer if e.id == instance.id][0]
+            instance.method = packet.method
+            selinstancef.args = packet.args
+            instance.result = sock.readObject()
+        return instance
+
+    def create2(self, request):
+        return PMethodCall(id, request.method, request.args, None, False)
+
+    def preWrite(self, sock):
+        self.result = sock.invokeMethod(self.method, self.args)
+
+    def write(self, sock):
+        super().write(sock)
+        if self.request:
+            sock.writeInt(self.method.obj)
+            sock.writeString(self.method.name)
+            sock.writeInt(self.method.args.__len__())
+            for arg in self.method.args:
+                sock.writeARType(arg)
+            sock.writeARType(self.method.ret)
+            sock.writeObject(self.args)
+            sock.metabuffer.append(self)
+        else:
+            sock.writeObject(self.result)
+
 class RemoteMethod:
-    def __init__(self, name: str, args: list, ret):
+    def __init__(self, name: str, args: list, ret, obj: int):
         self.name = name
         self.args = args
         self.ret = ret
+        self.obj = obj
 
 class ARType:
     def __init__(self, dim: int, type):
         self.dim = dim
         self.type = type
     
+    def of(obj): # TODO:
+        if obj == None:
+            return ARType(0, PType.NULL)
+        return ARType(0, PType.of(obj))
+
     def __repr__(self):
         return f"<{self.type}[{self.dim}]>"
 
@@ -299,15 +428,54 @@ class PType(Enum):
     OBJECT = 8
     NULL = 9
 
+    def of(obj):
+        if isinstance(obj, str):
+            return PType.STRING
+        if isinstance(obj, float):
+            return PType.DOUBLE
+        if isinstance(obj, int):
+            return PType.INT
+        if isinstance(obj, Enum):
+            return PType.ENUM
+        if isinstance(obj, Packet):
+            return PType.PACKET
+        if isinstance(obj, None):
+            return PType.NULL
+        return PType.OBJECT
+
+# Test section
+
+import logging
+
+class TestClassA:
+    def toString(self):
+        return self.__str__()
+
+class TestClassB:
+    def __init__(self, i: int):
+        self.i = i
+
+    def add(self, j):
+        if isinstance(j, int):
+            return TestClass(self.i + j)
+        if isinstance(j, TestClass):
+            return TestClass(self.i + j.i)
+
 if __name__ == '__main__':
+    logging.basicConfig(filename="PythonTest.log",level=logging.INFO)
+
     client = Client('localhost', 2014)
-    client.objectPool.append(object())
+    client.objectPool.append(TestClassA())
+    client.objectPool.append(TestClassB(21))
+
     client.createListener().start()
-    print(client.sendAndReceive(PObjectList.create0(Packet.nextId())).objects)
-    print(client.sendAndReceive(PObjectList.create0(Packet.nextId())).objects)
-    print()
+
+    logging.info("%s\n%s\n",
+        client.sendAndReceive(PObjectList.create0(Packet.nextId())).objects,
+        client.sendAndReceive(PMethodList(Packet.nextId(), 0, True)).methods
+    )
+
     for method in client.sendAndReceive(PMethodList(Packet.nextId(), 0, True)).methods:
-        print("[NAME]{}\n[ARGS]{}".format(method.name, method.args))
-        print("[RETURN]{}\n".format(method.ret))
+        logging.info("[NAME]%s\n[ARGS]%s\n[RETURN]%s\n", method.name, method.args, method.ret)
     input("Press Enter to continue...")
     client.close()
